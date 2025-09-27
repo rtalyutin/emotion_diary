@@ -1,0 +1,392 @@
+"""Telegram transport utilities for Emotion Diary bot."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Iterable, Mapping, Optional
+from urllib import request as urlrequest
+
+from emotion_diary.event_bus import EventBus
+
+logger = logging.getLogger(__name__)
+
+
+class TelegramAPIError(RuntimeError):
+    """Raised when Telegram API returns an error response."""
+
+
+class TelegramAPI:
+    """Minimal asynchronous Telegram Bot API client."""
+
+    def __init__(self, token: str, *, base_url: str | None = None, timeout: float = 10.0) -> None:
+        if not token:
+            raise ValueError("Telegram bot token must be provided")
+        self.token = token
+        self.base_url = base_url or f"https://api.telegram.org/bot{token}/"
+        if not self.base_url.endswith("/"):
+            self.base_url += "/"
+        self.timeout = timeout
+
+    async def call_method(
+        self,
+        method: str,
+        params: Mapping[str, Any] | None = None,
+        *,
+        files: Mapping[str, tuple[str, bytes, str]] | None = None,
+    ) -> Any:
+        url = f"{self.base_url}{method}"
+        payload = dict(params or {})
+        headers: Dict[str, str] = {}
+        data: bytes
+        if files:
+            boundary, data = _encode_multipart_formdata(payload, files)
+            headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+        else:
+            data = json.dumps(payload).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        headers["Accept"] = "application/json"
+
+        def _sync_request() -> Any:
+            req = urlrequest.Request(url, data=data, headers=headers, method="POST")
+            with urlrequest.urlopen(req, timeout=self.timeout) as response:  # type: ignore[call-arg]
+                body = response.read().decode("utf-8")
+            parsed = json.loads(body)
+            if not parsed.get("ok"):
+                raise TelegramAPIError(parsed.get("description", "Telegram API error"))
+            return parsed.get("result")
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _sync_request)
+
+    async def get_updates(
+        self,
+        *,
+        offset: int | None = None,
+        timeout: int = 30,
+        allowed_updates: Iterable[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        params: Dict[str, Any] = {"timeout": timeout}
+        if offset is not None:
+            params["offset"] = offset
+        if allowed_updates is not None:
+            params["allowed_updates"] = list(allowed_updates)
+        result = await self.call_method("getUpdates", params)
+        return list(result or [])
+
+    async def send_message(self, chat_id: int | str, text: str, **extra: Any) -> Any:
+        params = {"chat_id": chat_id, "text": text, **extra}
+        return await self.call_method("sendMessage", params)
+
+    async def send_photo(
+        self,
+        chat_id: int | str,
+        photo: str,
+        *,
+        caption: str | None = None,
+        parse_mode: str | None = None,
+        **extra: Any,
+    ) -> Any:
+        params: Dict[str, Any] = {"chat_id": chat_id, **extra}
+        if caption:
+            params["caption"] = caption
+        if parse_mode:
+            params["parse_mode"] = parse_mode
+
+        files: Dict[str, tuple[str, bytes, str]] | None = None
+        photo_path = Path(photo)
+        if photo_path.exists() and photo_path.is_file():
+            content = photo_path.read_bytes()
+            files = {"photo": (photo_path.name, content, "application/octet-stream")}
+        else:
+            params["photo"] = photo
+        return await self.call_method("sendPhoto", params, files=files)
+
+
+def _encode_multipart_formdata(
+    fields: Mapping[str, Any],
+    files: Mapping[str, tuple[str, bytes, str]],
+) -> tuple[str, bytes]:
+    boundary = os.urandom(16).hex()
+    body = bytearray()
+    for name, value in fields.items():
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(
+            f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8")
+        )
+        if isinstance(value, bytes):
+            body.extend(value)
+        else:
+            body.extend(str(value).encode("utf-8"))
+        body.extend(b"\r\n")
+    for name, (filename, content, content_type) in files.items():
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(
+            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'.encode(
+                "utf-8"
+            )
+        )
+        body.extend(f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"))
+        body.extend(content)
+        body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+    return boundary, bytes(body)
+
+
+def normalize_update(update: Mapping[str, Any]) -> Dict[str, Any]:
+    """Convert Telegram update payload to internal ``tg.update`` structure."""
+
+    payload: Dict[str, Any] = {"update_id": update.get("update_id"), "raw": dict(update)}
+
+    def _extract_message(message: Mapping[str, Any]) -> None:
+        chat = message.get("chat") or {}
+        chat_id = chat.get("id")
+        if chat_id is not None:
+            payload["chat_id"] = chat_id
+        if "text" in message:
+            payload["text"] = message.get("text")
+        if "message_id" in message:
+            payload["message_id"] = message.get("message_id")
+        ts = message.get("date")
+        if isinstance(ts, (int, float)):
+            payload["ts"] = datetime.fromtimestamp(int(ts), tz=timezone.utc)
+        elif isinstance(ts, str):
+            try:
+                payload["ts"] = datetime.fromisoformat(ts)
+            except ValueError:
+                pass
+
+    if "message" in update and isinstance(update["message"], Mapping):
+        _extract_message(update["message"])
+    if "edited_message" in update and isinstance(update["edited_message"], Mapping):
+        _extract_message(update["edited_message"])
+    if "callback_query" in update and isinstance(update["callback_query"], Mapping):
+        callback = update["callback_query"]
+        data = callback.get("data")
+        if data is not None:
+            payload["callback_data"] = data
+        if "message" in callback and isinstance(callback["message"], Mapping):
+            _extract_message(callback["message"])
+        from_user = callback.get("from") or {}
+        if from_user.get("id") is not None:
+            payload.setdefault("from_id", from_user.get("id"))
+
+    if "ts" not in payload:
+        payload["ts"] = datetime.now(timezone.utc)
+    return payload
+
+
+@dataclass
+class TelegramResponder:
+    """Subscribe to ``tg.response`` and send payloads to Telegram."""
+
+    bus: EventBus
+    api: TelegramAPI
+
+    def __post_init__(self) -> None:
+        self.bus.subscribe("tg.response", self.handle)
+
+    async def handle(self, event) -> None:
+        payload = dict(event.payload)
+        method = payload.pop("method", None)
+        files = payload.pop("files", None)
+        if method:
+            await self.api.call_method(method, payload, files=files)
+            return
+        chat_id = payload.pop("chat_id", None)
+        if chat_id is None:
+            logger.debug("TelegramResponder got payload without chat_id: %s", payload)
+            return
+        text = payload.pop("text", None)
+        sprite = payload.pop("sprite", None)
+        if sprite:
+            await self.api.send_photo(chat_id, sprite, caption=text, **payload)
+        elif text:
+            await self.api.send_message(chat_id, text, **payload)
+        else:
+            logger.debug("TelegramResponder payload has neither text nor sprite: %s", payload)
+
+
+async def run_polling(
+    bus: EventBus,
+    api: TelegramAPI,
+    *,
+    poll_timeout: int = 30,
+    idle_delay: float = 1.0,
+) -> None:
+    """Continuously fetch updates from Telegram and publish them to the bus."""
+
+    logger.info("Starting polling loop")
+    offset: Optional[int] = None
+    try:
+        while True:
+            try:
+                updates = await api.get_updates(offset=offset, timeout=poll_timeout)
+            except Exception:  # pragma: no cover - defensive logging
+                logger.exception("Polling failed, retrying")
+                await asyncio.sleep(min(idle_delay, 5.0))
+                continue
+            if updates:
+                for update in updates:
+                    payload = normalize_update(update)
+                    update_id = payload.get("update_id")
+                    if isinstance(update_id, int):
+                        offset = max(offset or 0, update_id + 1)
+                    await bus.publish(
+                        "tg.update",
+                        payload=payload,
+                        metadata={"transport": "polling"},
+                    )
+            else:
+                await asyncio.sleep(idle_delay)
+    except asyncio.CancelledError:  # pragma: no cover - graceful shutdown
+        logger.info("Polling loop cancelled")
+        raise
+
+
+class WebhookServer:
+    """Minimal HTTP server to accept Telegram webhook updates."""
+
+    def __init__(self, host: str, port: int, secret: str, bus: EventBus) -> None:
+        self.host = host
+        self.port = port
+        self.secret = secret
+        self.bus = bus
+        self._server: asyncio.base_events.Server | None = None
+
+    async def start(self) -> None:
+        self._server = await asyncio.start_server(self._handle_client, self.host, self.port)
+        sockets = getattr(self._server, "sockets", None)
+        if sockets:
+            sock = sockets[0].getsockname()
+            logger.info("Webhook server listening on %s:%s", sock[0], sock[1])
+
+    async def _handle_client(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        try:
+            request = await self._read_request(reader)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to read webhook request")
+            writer.close()
+            await writer.wait_closed()
+            return
+        if request is None:
+            writer.close()
+            await writer.wait_closed()
+            return
+        method, headers, body = request
+        status, response_body = await self.process_request(method, headers, body)
+        response = self._format_response(status, response_body)
+        writer.write(response)
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    async def _read_request(
+        self, reader: asyncio.StreamReader
+    ) -> tuple[str, Dict[str, str], bytes] | None:
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = await reader.read(1024)
+            if not chunk:
+                break
+            data += chunk
+        if not data:
+            return None
+        headers_part, _, remainder = data.partition(b"\r\n\r\n")
+        try:
+            header_lines = headers_part.decode("iso-8859-1").split("\r\n")
+            request_line = header_lines[0]
+            method, _path, _protocol = request_line.split(" ", 2)
+        except Exception:
+            return None
+        headers: Dict[str, str] = {}
+        for line in header_lines[1:]:
+            if not line or ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            headers[key.strip().lower()] = value.strip()
+        content_length = int(headers.get("content-length", "0"))
+        body = remainder
+        missing = content_length - len(body)
+        if missing > 0:
+            body += await reader.readexactly(missing)
+        return method.upper(), headers, body
+
+    async def process_request(
+        self, method: str, headers: Mapping[str, str], body: bytes
+    ) -> tuple[int, bytes]:
+        if method != "POST":
+            return 405, b""
+        token = headers.get("x-telegram-bot-api-secret-token")
+        if not token or token != self.secret:
+            return 403, b""
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return 400, b""
+        await self.bus.publish(
+            "tg.update",
+            payload=normalize_update(payload),
+            metadata={"transport": "webhook"},
+        )
+        return 200, b"{}"
+
+    async def stop(self) -> None:
+        if self._server is not None:
+            self._server.close()
+            await self._server.wait_closed()
+            self._server = None
+
+    async def serve_forever(self) -> None:
+        if self._server is None:
+            raise RuntimeError("Server is not started")
+        async with self._server:
+            await self._server.serve_forever()
+
+    @staticmethod
+    def _format_response(status: int, body: bytes) -> bytes:
+        reason = {
+            200: "OK",
+            400: "Bad Request",
+            403: "Forbidden",
+            405: "Method Not Allowed",
+        }.get(status, "OK")
+        payload = body or b""
+        headers = [
+            f"HTTP/1.1 {status} {reason}",
+            f"Content-Length: {len(payload)}",
+            "Connection: close",
+        ]
+        if payload:
+            headers.append("Content-Type: application/json")
+        headers.append("")
+        headers.append("")
+        response = "\r\n".join(headers).encode("utf-8") + payload
+        return response
+
+
+async def run_webhook(
+    host: str,
+    port: int,
+    bus: EventBus,
+    *,
+    secret: str,
+) -> None:
+    """Run webhook HTTP server until cancelled."""
+
+    server = WebhookServer(host, port, secret, bus)
+    await server.start()
+    try:
+        await server.serve_forever()
+    except asyncio.CancelledError:  # pragma: no cover - graceful shutdown
+        logger.info("Webhook loop cancelled")
+        raise
+    finally:
+        await server.stop()
