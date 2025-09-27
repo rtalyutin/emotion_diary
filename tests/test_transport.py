@@ -141,6 +141,43 @@ def test_telegram_responder_sends_photo():
     asyncio.run(_run())
 
 
+def test_telegram_responder_uploads_document(tmp_path):
+    async def _run():
+        bus = EventBus()
+        api = FakeTelegramAPI([])
+        TelegramResponder(bus, api)
+
+        document = tmp_path / "export.csv"
+        document.write_text("ts,mood\n")
+
+        await bus.publish(
+            "tg.response",
+            {
+                "method": "sendDocument",
+                "chat_id": 99,
+                "document_path": str(document),
+                "caption": "Отчёт готов",
+            },
+        )
+
+        assert api.sent
+        method, payload = api.sent[0]
+        assert method == "sendDocument"
+        assert "files" in payload
+        files = payload["files"]
+        assert "document" in files
+        filename, content, mime = files["document"]
+        assert filename == document.name
+        assert content == document.read_bytes()
+        assert mime == "application/octet-stream"
+        params = payload["params"]
+        assert params["chat_id"] == 99
+        assert params.get("caption") == "Отчёт готов"
+        assert "document" not in params
+
+    asyncio.run(_run())
+
+
 def test_webhook_server_validates_secret_and_publishes():
     async def _run():
         bus = EventBus()

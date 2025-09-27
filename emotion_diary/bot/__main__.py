@@ -18,6 +18,7 @@ from emotion_diary.agents import (
     PetRender,
     Router,
 )
+from emotion_diary.assets import ensure_builtin_assets
 from emotion_diary.event_bus import EventBus
 from emotion_diary.storage import PostgresAdapter, SQLiteAdapter, Storage
 
@@ -27,12 +28,22 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SQLITE_PATH = "emotion_diary.db"
 DEFAULT_EXPORT_DIR = Path(os.getenv("EMOTION_DIARY_EXPORT_DIR", "./exports"))
+BASE_DIR = Path(__file__).resolve().parent.parent
+_DEFAULT_ASSETS = os.getenv("EMOTION_DIARY_ASSETS_DIR")
+DEFAULT_ASSETS_DIR = (
+    Path(_DEFAULT_ASSETS).expanduser() if _DEFAULT_ASSETS else (BASE_DIR / "assets")
+)
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Emotion Diary bot entry-point")
     parser.add_argument("--mode", choices=["polling", "webhook", "scheduler"], required=True)
     parser.add_argument("--dsn", default=f"sqlite:///{DEFAULT_SQLITE_PATH}", help="Database DSN")
     parser.add_argument("--export-dir", default=str(DEFAULT_EXPORT_DIR), help="Directory for exports")
+    parser.add_argument(
+        "--assets-dir",
+        default=str(DEFAULT_ASSETS_DIR),
+        help="Directory that stores sprite assets",
+    )
     parser.add_argument("--host", default="127.0.0.1", help="Webhook host")
     parser.add_argument("--port", type=int, default=8080, help="Webhook port")
     parser.add_argument("--log-level", default=os.getenv("LOG_LEVEL", "INFO"))
@@ -49,11 +60,17 @@ def create_storage(dsn: str) -> Storage:
     else:
         adapter = SQLiteAdapter(dsn)
     return Storage(adapter)
-def bootstrap(bus: EventBus, storage: Storage, export_dir: Path, api: TelegramAPI) -> None:
+def bootstrap(
+    bus: EventBus,
+    storage: Storage,
+    export_dir: Path,
+    assets_dir: Path,
+    api: TelegramAPI,
+) -> None:
     Dedup(bus)
     Router(bus, storage)
     CheckinWriter(bus, storage)
-    PetRender(bus)
+    PetRender(bus, assets_dir=assets_dir)
     Notifier(bus)
     Export(bus, storage, export_dir=export_dir)
     Delete(bus, storage)
@@ -78,8 +95,15 @@ async def async_main(args: argparse.Namespace) -> None:
     api = TelegramAPI(bot_token)
     bus = EventBus()
     storage = create_storage(args.dsn)
-    export_dir = Path(args.export_dir)
-    bootstrap(bus, storage, export_dir, api)
+    export_dir = Path(args.export_dir).expanduser().resolve()
+    export_dir.mkdir(parents=True, exist_ok=True)
+    assets_dir = Path(args.assets_dir).expanduser().resolve()
+    bundled_assets_dir = (BASE_DIR / "assets").resolve()
+    if assets_dir == bundled_assets_dir:
+        ensure_builtin_assets(assets_dir)
+    elif not assets_dir.exists():
+        raise RuntimeError(f"Assets directory does not exist: {assets_dir}")
+    bootstrap(bus, storage, export_dir, assets_dir, api)
 
     if args.mode == "polling":
         await run_polling(bus, api)
