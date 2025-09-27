@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from emotion_diary.event_bus import Event, EventBus
@@ -29,14 +30,17 @@ class Notifier:
             logger.debug("Notifier received payload without chat_id: %s", payload)
             return
         message, extras = self._build_message(event.name, payload)
-        if message is None:
+        if message is None and not extras:
             return
         response = {
             "chat_id": chat_id,
-            "text": message,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
+        if message is not None:
+            response["text"] = message
         response.update(extras)
+        if response.get("text") is None:
+            response.pop("text", None)
         if event.name == "pet.rendered":
             response["sprite"] = payload.get("sprite")
         await self.bus.publish("tg.response", response)
@@ -61,8 +65,27 @@ class Notifier:
             }
             return "Пора рассказать о настроении. Как прошёл день?", extras
         if event_name == "export.ready":
-            link = payload.get("file_path")
-            return f"Готов экспорт данных: {link}", extras
+            tg_hint = dict(payload.get("tg") or {})
+            document_path = tg_hint.get("document_path") or payload.get("file_path")
+            caption = "Готов экспорт данных. Файл во вложении."
+            if document_path:
+                path = Path(document_path)
+                if path.exists() and path.is_file():
+                    extras["method"] = tg_hint.get("method", "sendDocument")
+                    extras["caption"] = caption
+                    extras["files"] = {
+                        "document": (
+                            path.name,
+                            path.read_bytes(),
+                            "text/csv",
+                        )
+                    }
+                    return None, extras
+                return (
+                    f"Готов экспорт данных: {document_path}",
+                    extras,
+                )
+            return ("Экспорт не удался: файл не найден.", extras)
         if event_name == "delete.done":
             return "Все данные удалены. Надеемся увидеть вас снова!", extras
         return None, extras
