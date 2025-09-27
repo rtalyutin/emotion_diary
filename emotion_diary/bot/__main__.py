@@ -21,23 +21,12 @@ from emotion_diary.agents import (
 from emotion_diary.event_bus import EventBus
 from emotion_diary.storage import PostgresAdapter, SQLiteAdapter, Storage
 
+from .transport import TelegramAPI, TelegramResponder, run_polling, run_webhook
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_SQLITE_PATH = "emotion_diary.db"
 DEFAULT_EXPORT_DIR = Path(os.getenv("EMOTION_DIARY_EXPORT_DIR", "./exports"))
-
-
-class ResponseLogger:
-    """Subscribe to ``tg.response`` and log outgoing messages."""
-
-    def __init__(self, bus: EventBus) -> None:
-        self.bus = bus
-        self.bus.subscribe("tg.response", self.handle)
-
-    async def handle(self, event):  # pragma: no cover - logging only
-        payload = event.payload
-        logger.info("TG response for %s: %s", payload.get("chat_id"), payload.get("text"))
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Emotion Diary bot entry-point")
@@ -60,9 +49,7 @@ def create_storage(dsn: str) -> Storage:
     else:
         adapter = SQLiteAdapter(dsn)
     return Storage(adapter)
-
-
-def bootstrap(bus: EventBus, storage: Storage, export_dir: Path) -> None:
+def bootstrap(bus: EventBus, storage: Storage, export_dir: Path, api: TelegramAPI) -> None:
     Dedup(bus)
     Router(bus, storage)
     CheckinWriter(bus, storage)
@@ -70,27 +57,7 @@ def bootstrap(bus: EventBus, storage: Storage, export_dir: Path) -> None:
     Notifier(bus)
     Export(bus, storage, export_dir=export_dir)
     Delete(bus, storage)
-    ResponseLogger(bus)
-
-
-async def run_polling(bus: EventBus) -> None:
-    logger.info("Starting polling loop (placeholder implementation)")
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except asyncio.CancelledError:  # pragma: no cover - graceful shutdown
-        logger.info("Polling loop cancelled")
-        raise
-
-
-async def run_webhook(host: str, port: int, bus: EventBus) -> None:
-    logger.info("Starting webhook server on %s:%s (placeholder implementation)", host, port)
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except asyncio.CancelledError:  # pragma: no cover - graceful shutdown
-        logger.info("Webhook loop cancelled")
-        raise
+    TelegramResponder(bus, api)
 
 
 async def run_scheduler(bus: EventBus, storage: Storage, forced_hour: int | None = None) -> None:
@@ -105,15 +72,22 @@ async def run_scheduler(bus: EventBus, storage: Storage, forced_hour: int | None
 
 async def async_main(args: argparse.Namespace) -> None:
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
+    bot_token = os.getenv("BOT_TOKEN")
+    if not bot_token:
+        raise RuntimeError("BOT_TOKEN environment variable must be set")
+    api = TelegramAPI(bot_token)
     bus = EventBus()
     storage = create_storage(args.dsn)
     export_dir = Path(args.export_dir)
-    bootstrap(bus, storage, export_dir)
+    bootstrap(bus, storage, export_dir, api)
 
     if args.mode == "polling":
-        await run_polling(bus)
+        await run_polling(bus, api)
     elif args.mode == "webhook":
-        await run_webhook(args.host, args.port, bus)
+        secret = os.getenv("WEBHOOK_SECRET")
+        if not secret:
+            raise RuntimeError("WEBHOOK_SECRET environment variable must be set for webhook mode")
+        await run_webhook(args.host, args.port, bus, secret=secret)
     elif args.mode == "scheduler":
         await run_scheduler(bus, storage, forced_hour=args.scheduler_hour)
     else:  # pragma: no cover - argparse ensures mode
