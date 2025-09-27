@@ -32,7 +32,7 @@ class Export:
         if pid is None or chat_id is None:
             logger.debug("Export request missing pid/chat_id: %s", payload)
             return
-        entries = self.storage.list_entries(pid)
+        entries = self._load_entries(pid)
         file_path = self._write_csv(pid, entries)
         await self.bus.publish(
             "export.ready",
@@ -40,8 +40,40 @@ class Export:
                 "pid": pid,
                 "chat_id": chat_id,
                 "file_path": str(file_path),
+                "tg": {
+                    "method": "sendDocument",
+                    "document_path": str(file_path),
+                    "filename": file_path.name,
+                },
             },
         )
+
+    def _load_entries(self, pid: str) -> list[Entry]:
+        try:
+            return list(self.storage.list_entries(pid))
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning("Failed to load entries via storage.list_entries for %s: %s", pid, exc)
+            rows = self.storage.adapter.fetchall(
+                "SELECT id, pid, CAST(ts AS TEXT) as ts, mood, note FROM entries WHERE pid=? ORDER BY ts",
+                (pid,),
+            )
+            entries: list[Entry] = []
+            for row in rows:
+                ts = row["ts"]
+                if isinstance(ts, bytes):
+                    ts = ts.decode("utf-8")
+                if isinstance(ts, str):
+                    ts = datetime.fromisoformat(ts)
+                entries.append(
+                    Entry(
+                        id=row["id"],
+                        pid=row["pid"],
+                        ts=ts,
+                        mood=row["mood"],
+                        note=row["note"],
+                    )
+                )
+            return entries
 
     def _write_csv(self, pid: str, entries: Iterable[Entry]) -> Path:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")

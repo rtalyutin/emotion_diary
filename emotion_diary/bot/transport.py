@@ -193,9 +193,21 @@ class TelegramResponder:
 
     async def handle(self, event) -> None:
         payload = dict(event.payload)
+        payload.pop("created_at", None)
         method = payload.pop("method", None)
         files = payload.pop("files", None)
+        document_path = payload.pop("document_path", None)
         if method:
+            if method == "sendDocument" and document_path and files is None:
+                doc_path = Path(document_path)
+                if doc_path.exists() and doc_path.is_file():
+                    files = {
+                        "document": (
+                            doc_path.name,
+                            doc_path.read_bytes(),
+                            "application/octet-stream",
+                        )
+                    }
             await self.api.call_method(method, payload, files=files)
             return
         chat_id = payload.pop("chat_id", None)

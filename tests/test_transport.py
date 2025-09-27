@@ -4,7 +4,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 
-from emotion_diary.agents import CheckinWriter, Dedup, Notifier, Router
+from emotion_diary.agents import CheckinWriter, Dedup, Export, Notifier, Router
 from emotion_diary.bot.transport import (
     TelegramResponder,
     WebhookServer,
@@ -52,6 +52,7 @@ def test_polling_transport_integration(tmp_path):
         Dedup(bus)
         Router(bus, storage)
         CheckinWriter(bus, storage)
+        Export(bus, storage, tmp_path)
         Notifier(bus)
 
         updates = [
@@ -88,6 +89,24 @@ def test_polling_transport_integration(tmp_path):
         assert method == "sendMessage"
         assert payload["chat_id"] == 555
         assert "Записал" in payload["text"]
+
+        api.sent_event.clear()
+        await bus.publish(
+            "export.request",
+            {"pid": ident.pid, "chat_id": 555},
+        )
+
+        method, payload = api.sent[-1]
+        assert method == "sendDocument"
+        params = payload["params"]
+        assert params["chat_id"] == 555
+        assert params["caption"] == "Готов экспорт данных. Файл во вложении."
+        files = payload["files"]
+        assert "document" in files
+        filename, content, mime = files["document"]
+        assert filename.endswith(".csv")
+        assert mime == "text/csv"
+        assert b"ts,mood,note" in content
 
         assert api.offsets
         assert api.offsets[0] is None
