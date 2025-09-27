@@ -1,0 +1,5 @@
+# Development dependencies build on top of runtime requirements.
+-r requirements.txt
+pytest>=8.0
+mypy>=1.10
+ruff>=0.2
