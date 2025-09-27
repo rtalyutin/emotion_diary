@@ -1,0 +1,11 @@
+%% C4 L1 Context diagram
+graph TD
+    User((Пользователь))
+    TelegramAPI[[Telegram Bot API]]
+    EmotionBot[(Emotion Diary Bot)]
+    Storage[(БД/Хранилище чек-инов)]
+
+    User -->|сообщения, команды| TelegramAPI
+    TelegramAPI -->|tg.update webhook| EmotionBot
+    EmotionBot -->|ответы, карточки| TelegramAPI
+    EmotionBot -->|чтение/запись состояний| Storage

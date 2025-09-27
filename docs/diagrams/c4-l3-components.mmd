@@ -1,0 +1,35 @@
+%% C4 L3 Component diagram
+flowchart LR
+    Bus{{Event Bus}}
+    Dedup[Dedup]
+    Router[Router]
+    CheckinWriter[CheckinWriter]
+    PetRender[PetRender]
+    Notifier[Notifier]
+    Exporter[Export]
+    Deleter[Delete]
+    Store[(БД/файлы)]
+
+    Bus -->|tg.update| Dedup
+    Dedup -->|tg.update| Router
+    Router -->|checkin.save| Bus
+    Router -->|export.request| Bus
+    Router -->|delete.request| Bus
+    Bus -->|checkin.save| CheckinWriter
+    CheckinWriter -->|чтение/запись| Store
+    CheckinWriter -->|checkin.saved| Bus
+    Bus -->|checkin.saved| PetRender
+    Bus -->|ping.request| PetRender
+    PetRender -->|asset lookup| Store
+    PetRender -->|pet.rendered| Bus
+    Bus -->|ping.request| Notifier
+    Bus -->|pet.rendered| Notifier
+    Bus -->|checkin.saved| Notifier
+    Bus -->|export.ready| Notifier
+    Bus -->|delete.done| Notifier
+    Exporter -->|чтение записей| Store
+    Bus -->|export.request| Exporter
+    Exporter -->|export.ready| Bus
+    Bus -->|delete.request| Deleter
+    Deleter -->|удаление данных| Store
+    Deleter -->|delete.done| Bus

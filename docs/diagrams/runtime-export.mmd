@@ -1,0 +1,24 @@
+%% Runtime scenario: export request
+sequenceDiagram
+    participant U as Пользователь
+    participant TG as Telegram API
+    participant WH as Webhook-сервис
+    participant Q as Очередь
+    participant D as Dedup
+    participant R as Router
+    participant E as Export
+    participant N as Notifier
+
+    U->>TG: Команда /export
+    TG->>WH: tg.update
+    WH->>Q: publish tg.update
+    Q->>D: deliver tg.update
+    D->>R: tg.update (уникальный)
+    R->>E: export.request
+    E->>E: Сбор чек-инов
+    E->>Q: export.ready (ссылка на CSV)
+    Q->>N: deliver export.ready
+    N->>Q: уведомление с ссылкой
+    Q->>WH: deliver tg.response
+    WH->>TG: Ответ с CSV ссылкой
+    TG->>U: Получение ссылки на экспорт

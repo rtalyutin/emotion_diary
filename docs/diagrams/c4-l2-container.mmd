@@ -1,0 +1,18 @@
+%% C4 L2 Container diagram
+flowchart TD
+    TelegramAPI[[Telegram Bot API]]
+    Webhook[(Webhook-сервис)]
+    Scheduler[(Планировщик)]
+    Worker[(Worker-сервис<br/>Router/Dedup/...)]
+    Queue{{Очередь событий / Cron}}
+    Storage[(БД/хранилище)]
+
+    TelegramAPI -->|tg.update HTTPS| Webhook
+    Webhook -->|tg.update| Queue
+    Scheduler -->|ping.request| Queue
+    Queue -->|tg.update, ping.request| Worker
+    Worker -->|checkin.save| Storage
+    Worker -->|checkin.saved, pet.render, export.request, delete.request| Queue
+    Queue -->|pet.rendered, export.ready, delete.done| Worker
+    Worker -->|ответы, карточки| Webhook
+    Webhook -->|ответы| TelegramAPI
