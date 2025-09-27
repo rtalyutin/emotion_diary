@@ -1,0 +1,24 @@
+%% Runtime scenario: delete request
+sequenceDiagram
+    participant U as Пользователь
+    participant TG as Telegram API
+    participant WH as Webhook-сервис
+    participant Q as Очередь
+    participant D as Dedup
+    participant R as Router
+    participant Del as Delete
+    participant N as Notifier
+
+    U->>TG: Команда /delete
+    TG->>WH: tg.update
+    WH->>Q: publish tg.update
+    Q->>D: deliver tg.update
+    D->>R: tg.update (уникальный)
+    R->>Del: delete.request
+    Del->>Del: Полное удаление данных
+    Del->>Q: delete.done
+    Q->>N: deliver delete.done
+    N->>Q: уведомление об удалении
+    Q->>WH: deliver tg.response
+    WH->>TG: Ответ "данные удалены"
+    TG->>U: Подтверждение удаления

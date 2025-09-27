@@ -1,0 +1,23 @@
+%% Deployment diagram
+flowchart TB
+    subgraph Cloud[Облако / Kubernetes]
+        subgraph BotNamespace[Namespace emotion-diary]
+            WebhookPod[(Deployment: Webhook)]
+            WorkerPod[(Deployment: Worker)]
+            SchedulerJob[(CronJob: Scheduler)]
+        end
+        Secrets[(Secrets: ENV + Telegram token)]
+        Observability[(Observability: Prometheus/Grafana + Logs)]
+    end
+    ManagedDB[(Managed DB / S3-хранилище)]
+    TelegramAPI[[Telegram Bot API]]
+
+    TelegramAPI -->|HTTPS webhook| WebhookPod
+    WebhookPod -->|ENV| Secrets
+    WorkerPod -->|ENV| Secrets
+    SchedulerJob -->|ENV| Secrets
+    WebhookPod -->|метрики/логи| Observability
+    WorkerPod -->|метрики/логи| Observability
+    SchedulerJob -->|метрики/логи| Observability
+    WorkerPod -->|чтение/запись| ManagedDB
+    WebhookPod -->|чтение/запись| ManagedDB

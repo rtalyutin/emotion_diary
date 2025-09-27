@@ -1,0 +1,27 @@
+%% Runtime scenario: evening check-in
+sequenceDiagram
+    participant U as Пользователь
+    participant TG as Telegram API
+    participant WH as Webhook-сервис
+    participant Q as Очередь
+    participant D as Dedup
+    participant R as Router
+    participant CW as CheckinWriter
+    participant PR as PetRender
+    participant N as Notifier
+
+    U->>TG: Сообщение /checkin
+    TG->>WH: tg.update
+    WH->>Q: publish tg.update
+    Q->>D: deliver tg.update
+    D->>R: tg.update (уникальный)
+    R->>CW: checkin.save (оценка настроения)
+    CW->>CW: Запись в БД
+    CW->>Q: checkin.saved
+    Q->>PR: deliver checkin.saved
+    PR->>PR: Выбор спрайта (pet.render)
+    PR->>N: pet.rendered
+    N->>Q: уведомление (карточка)
+    Q->>WH: deliver tg.response
+    WH->>TG: ответ/картинка
+    TG->>U: Сообщение с питомцем
