@@ -135,6 +135,11 @@ SLA: время от нажатия до ответа ≤1.5 с.
 | `WEBHOOK_SECRET`  | Секрет подписи входящих вебхуков для проверки подлинности. |
 | `DATABASE_URL`    | Строка подключения к базе: `sqlite:///emotion_diary.db` или `postgresql://user:pass@host/db`. |
 
+Дополнительные переменные окружения:
+
+- `EMOTION_DIARY_EXPORT_DIR` — каталог, куда будут складываться выгрузки CSV (по умолчанию `./exports`).
+- `EMOTION_DIARY_ASSETS_DIR` — путь к каталогу со спрайтами питомца. По умолчанию используется встроенная папка [`emotion_diary/assets`](emotion_diary/assets), в которую при первом запуске раскладываются PNG-файлы (они хранятся в репозитории в текстовом Base64-представлении, чтобы избежать бинарных diff).
+
 Рекомендуется хранить настройки в файле `.env` (не коммитить в репозиторий):
 
 ```dotenv
@@ -150,10 +155,10 @@ DATABASE_URL=sqlite:///emotion_diary.db
 
 ## Запуск
 
-Локальный запуск в режиме polling (получение обновлений через long polling):
+Локальный запуск в режиме polling (получение обновлений через long polling). Опционально укажите `--assets-dir`, если хотите использовать собственные изображения питомца:
 
 ```bash
-python -m emotion_diary.bot --mode polling
+python -m emotion_diary.bot --mode polling --assets-dir /path/to/custom/assets
 ```
 
 Запуск webhook-сервера (предварительно зарегистрируйте URL в Telegram через `setWebhook`):

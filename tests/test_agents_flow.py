@@ -60,7 +60,15 @@ def test_checkin_export_delete_flow(tmp_path: Path):
         await bus.publish("export.request", {"pid": ident.pid, "chat_id": 1001})
         export_files = list(export_dir.glob("*.csv"))
         assert export_files, "export file must be created"
-        assert any("Готов экспорт данных" in resp["text"] for resp in responses)
+        assert any(
+            (
+                "text" in resp and "Готов экспорт данных" in resp["text"]
+            )
+            or (
+                "caption" in resp and "Готов экспорт данных" in resp["caption"]
+            )
+            for resp in responses
+        )
 
         responses.clear()
         await bus.publish("delete.request", {"pid": ident.pid, "chat_id": 1001})
