@@ -103,12 +103,9 @@ SLA: время от нажатия до ответа ≤1.5 с.
 ## Требования
 
 - Python 3.10 или новее.
-- `aiogram` 3.2+ для Telegram API и FSM.
-- `APScheduler` 3.10+ для фонового планировщика пингов.
-- Драйвер БД:
-  - `aiosqlite` для локального режима на SQLite, или
-  - `asyncpg` при использовании PostgreSQL.
-- Дополнительно: `python-dotenv` для загрузки `.env`, `alembic` для миграций.
+- Основные зависимости перечислены в [`requirements.txt`](requirements.txt).
+- Для разработки используйте [`requirements-dev.txt`](requirements-dev.txt), включающий линтеры и тестовые утилиты.
+- При работе с PostgreSQL установите `psycopg[binary]` (ставится автоматически из манифеста); для SQLite достаточно стандартной библиотеки.
 
 ## Установка
 
@@ -124,7 +121,8 @@ SLA: время от нажатия до ответа ≤1.5 с.
 
    ```bash
    pip install --upgrade pip
-   pip install -r requirements.txt
+   pip install -r requirements.txt            # базовые зависимости
+   pip install -r requirements-dev.txt        # инструменты разработки (опционально)
    ```
 
 ## Конфигурация
@@ -135,14 +133,14 @@ SLA: время от нажатия до ответа ≤1.5 с.
 | ----------------- | ---------------------------------------------------------- |
 | `BOT_TOKEN`       | Токен бота, полученный у `@BotFather`.                      |
 | `WEBHOOK_SECRET`  | Секрет подписи входящих вебхуков для проверки подлинности. |
-| `DATABASE_URL`    | Строка подключения к SQLite (`sqlite+aiosqlite:///...`) или PostgreSQL (`postgresql+asyncpg://user:pass@host/db`). |
+| `DATABASE_URL`    | Строка подключения к базе: `sqlite:///emotion_diary.db` или `postgresql://user:pass@host/db`. |
 
 Рекомендуется хранить настройки в файле `.env` (не коммитить в репозиторий):
 
 ```dotenv
 BOT_TOKEN=1234567890:ABCDEF...
 WEBHOOK_SECRET=super-secret-value
-DATABASE_URL=sqlite+aiosqlite:///./emotion_diary.db
+DATABASE_URL=sqlite:///emotion_diary.db
 ```
 
 Дополнительные переменные для вебхуков:
@@ -176,9 +174,15 @@ alembic downgrade -1      # откатить последнюю миграцию
 Перед пушем запускайте проверки качества и тесты:
 
 ```bash
-ruff check emotion_diary          # линтер кода
-mypy emotion_diary                # статическая типизация
-pytest                            # юнит- и интеграционные тесты
+python -m venv .venv-requirements && . .venv-requirements/bin/activate && \
+    pip install --upgrade pip && \
+    pip install -r requirements.txt  # проверка чистой установки зависимостей
+
+ruff check emotion_diary            # линтер кода
+mypy emotion_diary                  # статическая типизация
+pytest                              # юнит- и интеграционные тесты
 ```
+
+При запуске в CI шаг проверки зависимостей можно вынести в отдельный job с `pip install -r requirements.txt` в чистом окружении.
 
 Для автоматизации можно создать Makefile или использовать скрипты CI/CD.
