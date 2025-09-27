@@ -83,6 +83,18 @@ class Router:
         return None
 
     def _resolve_mood(self, payload: dict) -> Optional[int]:
+        callback_data = payload.get("callback_data")
+        if isinstance(callback_data, str):
+            callback_data = callback_data.strip()
+            if callback_data.startswith("mood:"):
+                _, _, mood_part = callback_data.partition(":")
+                mood_part = mood_part.strip().replace("\u2212", "-")
+                try:
+                    mood = int(mood_part)
+                except ValueError:
+                    mood = None
+                else:
+                    return mood if mood in {-1, 0, 1} else None
         if payload.get("mood") is not None:
             try:
                 mood = int(payload["mood"])
