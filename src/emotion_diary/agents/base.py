@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -18,11 +19,12 @@ class SupportsSubscribe(Protocol):
 
 
 @dataclass(slots=True)
-class Agent:
+class Agent(ABC):
     """Base class for event-driven agents bound to an :class:`EventBus`."""
 
     bus: EventBus
 
-    def register(self) -> None:  # pragma: no cover - to be implemented in subclasses
+    @abstractmethod
+    def register(self) -> None:
         """Subscribe required handlers on the event bus."""
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover - enforced by abstractmethod

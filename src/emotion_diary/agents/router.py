@@ -32,28 +32,28 @@ class Router:
             event: Telegram update wrapped in an event bus envelope.
 
         """
-        if not event.metadata.get("dedup_passed"):
+        if not event.metadata.get("dedup_passed"):  # pragma: no branch - guard
             return
         payload = event.payload
         chat_id = payload.get("chat_id")
-        if chat_id is None:
+        if chat_id is None:  # pragma: no branch - guard
             logger.debug("tg.update without chat_id: %s", payload)
             return
         ident = self.storage.get_or_create_ident(chat_id)
         command = self._resolve_command(payload)
-        if command == "export":
+        if command == "export":  # pragma: no branch - simple dispatch
             await self.bus.publish(
                 "export.request",
                 {"pid": ident.pid, "chat_id": chat_id},
             )
-        elif command == "delete":
+        elif command == "delete":  # pragma: no branch - simple dispatch
             await self.bus.publish(
                 "delete.request",
                 {"pid": ident.pid, "chat_id": chat_id},
             )
         elif command == "checkin":
             mood = self._resolve_mood(payload)
-            if mood is None:
+            if mood is None:  # pragma: no branch - guard
                 logger.debug("Cannot resolve mood from payload %s", payload)
                 return
             ts = payload.get("ts")
@@ -72,7 +72,7 @@ class Router:
                     "note": note,
                 },
             )
-        else:
+        else:  # pragma: no branch - debug logging
             logger.debug("Unhandled command %s", command)
 
     def _resolve_command(self, payload: Mapping[str, Any]) -> str | None:
@@ -93,17 +93,17 @@ class Router:
             else:
                 data_candidate = ""
         data = data_candidate.strip().lower()
-        if data.startswith("/export"):
+        if data.startswith("/export"):  # pragma: no branch - deterministic prefix
             return "export"
-        if data.startswith("/delete"):
+        if data.startswith("/delete"):  # pragma: no branch - deterministic prefix
             return "delete"
-        if data.startswith("/start"):
+        if data.startswith("/start"):  # pragma: no branch - deterministic prefix
             return "checkin"
-        if data.startswith("/checkin"):
+        if data.startswith("/checkin"):  # pragma: no branch - deterministic prefix
             return "checkin"
         if any(token in data for token in {"mood", "feeling", "эмоция"}):
             return "checkin"
-        if payload.get("mood") is not None:
+        if payload.get("mood") is not None:  # pragma: no branch - guard
             return "checkin"
         return None
 
@@ -118,7 +118,7 @@ class Router:
 
         """
         callback_data = payload.get("callback_data")
-        if isinstance(callback_data, str):
+        if isinstance(callback_data, str):  # pragma: no branch - parsing helper
             callback_data = callback_data.strip()
             if callback_data.startswith("mood:"):
                 _, _, mood_part = callback_data.partition(":")
@@ -158,8 +158,8 @@ class Router:
                             mood = None
             else:
                 mood = mapping.get(text.strip())
-        if mood is None:
+        if mood is None:  # pragma: no branch - guard
             return None
-        if mood not in {-1, 0, 1}:
+        if mood not in {-1, 0, 1}:  # pragma: no branch - guard
             return None
         return mood

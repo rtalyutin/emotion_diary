@@ -82,7 +82,7 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true
-source_pkgs = ["emotion_diary.storage"]
+source = ["src/emotion_diary"]
 
 [tool.coverage.report]
 skip_covered = true

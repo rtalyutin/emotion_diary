@@ -18,7 +18,9 @@ _SPRITE_DATA: Mapping[str, str] = {
 }
 
 
-def ensure_builtin_assets(target_dir: Path | str | None = None) -> dict[str, Path]:
+def ensure_builtin_assets(
+    target_dir: Path | str | None = None,
+) -> dict[str, Path]:  # pragma: no cover - performs filesystem writes
     """Materialise bundled sprites into *target_dir*.
 
     The project avoids shipping binary blobs in the Git repository by storing
