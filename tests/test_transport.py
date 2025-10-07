@@ -84,6 +84,7 @@ def test_polling_transport_integration(tmp_path: Path) -> None:
         captured_updates: list[dict[str, Any]] = []
 
         def capture_update(event: Event) -> None:
+            """Collect normalised Telegram updates for later assertions."""
             captured_updates.append(dict(event.payload))
 
         bus.subscribe("tg.update", capture_update)
