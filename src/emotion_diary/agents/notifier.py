@@ -21,7 +21,6 @@ class Notifier:
 
     def __post_init__(self) -> None:
         """Subscribe to events that require user-facing notifications."""
-
         self.bus.subscribe(
             (
                 "checkin.saved",
@@ -38,8 +37,8 @@ class Notifier:
 
         Args:
             event: Event containing data to be delivered to a Telegram chat.
-        """
 
+        """
         payload = event.payload
         chat_id = payload.get("chat_id")
         if chat_id is None:
@@ -72,8 +71,8 @@ class Notifier:
 
         Returns:
             A tuple of optional text and additional Telegram API parameters.
-        """
 
+        """
         extras: dict[str, Any] = {}
         if event_name == "checkin.saved":
             mood = payload.get("entry", {}).get("mood")

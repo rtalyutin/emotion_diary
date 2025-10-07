@@ -1,3 +1,5 @@
+"""Pytest configuration that ensures the project package is importable."""
+
 from __future__ import annotations
 
 import sys

@@ -17,15 +17,27 @@ DEFAULT_SALT = "emotion-diary-dev"
 
 @dataclass(slots=True)
 class Storage:
+    """High-level facade over database adapters used in the bot."""
+
     adapter: DatabaseAdapter
     ident_salt: str | None = None
 
     def __post_init__(self) -> None:
+        """Initialise the storage backend and ensure the schema is present."""
         self.ident_salt = self.ident_salt or os.getenv("EMOTION_DIARY_IDENT_SALT", DEFAULT_SALT)
         self.adapter.ensure_schema()
 
     # Ident operations -------------------------------------------------
     def get_or_create_ident(self, chat_id: int) -> Ident:
+        """Fetch an ident record by chat ID or create one on demand.
+
+        Args:
+            chat_id: Telegram chat identifier.
+
+        Returns:
+            The persisted :class:`Ident` instance.
+
+        """
         row = self.adapter.fetchone("SELECT pid, chat_id, created_at FROM ident WHERE chat_id=?", (chat_id,))
         if row:
             created_at = row["created_at"]
@@ -42,6 +54,17 @@ class Storage:
         return Ident(pid=pid, chat_id=chat_id, created_at=created_at)
 
     def ensure_user_record(self, pid: str, tz: str = "UTC", notify_hour: int = 20) -> User:
+        """Ensure a user settings record exists and is up to date.
+
+        Args:
+            pid: User identifier.
+            tz: Time zone name to store for reminders.
+            notify_hour: Preferred notification hour in UTC.
+
+        Returns:
+            The stored :class:`User` description.
+
+        """
         row = self.adapter.fetchone("SELECT pid, tz, notify_hour, created_at FROM users WHERE pid=?", (pid,))
         if row:
             created_at = row["created_at"]
@@ -63,6 +86,18 @@ class Storage:
 
     # Entry operations -------------------------------------------------
     def save_entry(self, pid: str, ts: datetime, mood: int, note: Optional[str]) -> Entry:
+        """Persist a mood entry for a user.
+
+        Args:
+            pid: Identifier of the user owning the entry.
+            ts: Timestamp when the mood was recorded.
+            mood: Normalised mood value.
+            note: Optional user-provided note.
+
+        Returns:
+            Newly created :class:`Entry` record.
+
+        """
         cur = self.adapter.execute(
             "INSERT INTO entries (pid, ts, mood, note, created_at) VALUES (?, ?, ?, ?, ?)",
             (pid, ts, mood, note, datetime.now(timezone.utc)),
@@ -71,6 +106,15 @@ class Storage:
         return Entry(id=entry_id, pid=pid, ts=ts, mood=mood, note=note)
 
     def list_entries(self, pid: str) -> List[Entry]:
+        """Return all entries for a user ordered by timestamp.
+
+        Args:
+            pid: Identifier of the user whose entries should be fetched.
+
+        Returns:
+            A list of :class:`Entry` objects sorted by timestamp.
+
+        """
         rows = self.adapter.fetchall(
             "SELECT id, pid, ts, mood, note FROM entries WHERE pid=? ORDER BY ts",
             (pid,),
@@ -84,12 +128,27 @@ class Storage:
         return entries
 
     def delete_user(self, pid: str) -> None:
+        """Remove a user and all related records.
+
+        Args:
+            pid: Identifier of the user that should be deleted.
+
+        """
         self.adapter.execute("DELETE FROM entries WHERE pid=?", (pid,))
         self.adapter.execute("DELETE FROM users WHERE pid=?", (pid,))
         self.adapter.execute("DELETE FROM ident WHERE pid=?", (pid,))
 
     # Scheduler helpers ------------------------------------------------
     def due_users(self, hour: int) -> List[tuple[str, int]]:
+        """List identifiers of users scheduled for reminders at the given hour.
+
+        Args:
+            hour: Hour in UTC for which reminders should be fetched.
+
+        Returns:
+            Tuples containing user identifiers and Telegram chat IDs.
+
+        """
         rows = self.adapter.fetchall(
             """
             SELECT users.pid as pid, ident.chat_id as chat_id
@@ -103,6 +162,15 @@ class Storage:
 
     # Internal ---------------------------------------------------------
     def _hash_chat_id(self, chat_id: int) -> str:
+        """Obfuscate chat identifiers before storing them in the database.
+
+        Args:
+            chat_id: Telegram chat identifier that needs hashing.
+
+        Returns:
+            Deterministic SHA-256 hash of the chat ID and salt.
+
+        """
         salt = self.ident_salt or DEFAULT_SALT
         return hmac.new(salt.encode(), str(chat_id).encode(), sha256).hexdigest()
 

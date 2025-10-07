@@ -25,7 +25,6 @@ class PetRender:
 
     def __post_init__(self) -> None:
         """Subscribe to events that require sprite rendering."""
-
         self.bus.subscribe(("checkin.saved", "ping.request"), self.handle)
 
     async def handle(self, event: Event) -> None:
@@ -33,8 +32,8 @@ class PetRender:
 
         Args:
             event: Event carrying mood information for sprite selection.
-        """
 
+        """
         payload = event.payload
         pid = payload.get("pid")
         chat_id = payload.get("chat_id")
@@ -62,8 +61,8 @@ class PetRender:
 
         Returns:
             Path or filename of the selected sprite image.
-        """
 
+        """
         options = SPRITES.get(mood, SPRITES[0])
         sprite = random.choice(options)
         if self.assets_dir:
