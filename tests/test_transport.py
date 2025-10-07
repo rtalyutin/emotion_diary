@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from emotion_diary.agents import CheckinWriter, Dedup, Export, Notifier, Router
 from emotion_diary.bot.transport import (
@@ -21,6 +24,17 @@ from emotion_diary.bot.transport import (
 from emotion_diary.event_bus import Event, EventBus
 from emotion_diary.storage import SQLiteAdapter, Storage
 
+
+@dataclass
+class PollingEnvironment:
+    """Container describing dependencies used during polling integration tests."""
+
+    bus: EventBus
+    storage: Storage
+    api: "FakeTelegramAPI"
+    captured_updates: list[dict[str, Any]]
+    message_date: int
+    chat_id: int
 
 class FakeTelegramAPI:
     """In-memory stand-in for the Telegram API used during tests."""
@@ -70,99 +84,131 @@ class FakeTelegramAPI:
         self.sent_event.set()
 
 
-def test_polling_transport_integration(tmp_path: Path) -> None:
-    """Verify that polling transport orchestrates agents and responders."""
-    import pytest
+async def setup_polling_environment(tmp_path: Path) -> PollingEnvironment:
+    """Initialise the event bus, storage, agents, and Telegram API doubles."""
 
-    async def _run() -> None:
-        """Run the polling workflow end-to-end using in-memory dependencies."""
-        bus = EventBus()
-        storage = Storage(SQLiteAdapter(":memory:"))
-        Dedup(bus)
-        Router(bus, storage)
-        CheckinWriter(bus, storage)
-        Export(bus, storage, tmp_path)
-        Notifier(bus)
+    bus = EventBus()
+    storage = Storage(SQLiteAdapter(":memory:"))
+    Dedup(bus)
+    Router(bus, storage)
+    CheckinWriter(bus, storage)
+    Export(bus, storage, tmp_path)
+    Notifier(bus)
 
-        captured_updates: list[dict[str, Any]] = []
+    captured_updates: list[dict[str, Any]] = []
 
-        def capture_update(event: Event) -> None:
-            """Collect normalised Telegram updates for later assertions."""
-            captured_updates.append(dict(event.payload))
+    def capture_update(event: Event) -> None:
+        captured_updates.append(dict(event.payload))
 
-        bus.subscribe("tg.update", capture_update)
+    bus.subscribe("tg.update", capture_update)
 
-        message_date = int(datetime.now(UTC).timestamp())
+    message_date = int(datetime.now(UTC).timestamp())
+    chat_id = 555
+    updates = [
+        {
+            "update_id": 101,
+            "message": {
+                "message_id": 1,
+                "date": message_date,
+                "chat": {"id": chat_id},
+                "text": "/checkin good",
+            },
+        }
+    ]
 
-        updates: list[dict[str, Any]] = [
-            {
-                "update_id": 101,
-                "message": {
-                    "message_id": 1,
-                    "date": message_date,
-                    "chat": {"id": 555},
-                    "text": "/checkin good",
-                },
-            }
-        ]
-        api = FakeTelegramAPI(updates)
-        TelegramResponder(bus, api)  # subscribe responses
+    api = FakeTelegramAPI(updates)
+    TelegramResponder(bus, api)
 
-        task = asyncio.create_task(
-            run_polling(bus, api, poll_timeout=0, idle_delay=0.01)
-        )
-        await asyncio.wait_for(api.sent_event.wait(), timeout=1)
+    return PollingEnvironment(
+        bus=bus,
+        storage=storage,
+        api=api,
+        captured_updates=captured_updates,
+        message_date=message_date,
+        chat_id=chat_id,
+    )
+
+
+async def run_polling_cycle(env: PollingEnvironment) -> None:
+    """Drive the polling coroutine until the first response is produced."""
+
+    task = asyncio.create_task(
+        run_polling(env.bus, env.api, poll_timeout=0, idle_delay=0.01)
+    )
+    try:
+        await asyncio.wait_for(env.api.sent_event.wait(), timeout=1)
         await asyncio.sleep(0.05)
+    finally:
         task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
 
-        ident = storage.get_or_create_ident(555)
-        row = storage.adapter.fetchone(
-            "SELECT COUNT(*) as cnt, MAX(mood) as mood FROM entries WHERE pid=?",
-            (ident.pid,),
-        )
-        assert row["cnt"] == 1
-        assert row["mood"] == 1
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
-        assert api.sent, "response must be sent via Telegram API"
-        method, payload = api.sent[0]
-        assert method == "sendMessage"
-        assert payload["chat_id"] == 555
-        assert "Записал" in payload["text"]
 
-        api.sent_event.clear()
-        await bus.publish(
-            "export.request",
-            {"pid": ident.pid, "chat_id": 555},
-        )
+async def assert_polling_response(env: PollingEnvironment):
+    """Validate that check-in processing stored data and responded."""
 
-        method, payload = api.sent[-1]
-        assert method == "sendDocument"
-        params = payload["params"]
-        assert params["chat_id"] == 555
-        assert params["caption"] == "Готов экспорт данных. Файл во вложении."
-        files = payload["files"]
-        assert "document" in files
-        filename, content, mime = files["document"]
-        assert filename.endswith(".csv")
-        assert mime == "text/csv"
-        assert b"ts,mood,note" in content
+    ident = env.storage.get_or_create_ident(env.chat_id)
+    row = env.storage.adapter.fetchone(
+        "SELECT COUNT(*) as cnt, MAX(mood) as mood FROM entries WHERE pid=?",
+        (ident.pid,),
+    )
+    assert row["cnt"] == 1
+    assert row["mood"] == 1
 
-        assert api.offsets
-        assert api.offsets[0] is None
-        if len(api.offsets) > 1:
-            assert api.offsets[1] == 102
+    assert env.api.sent, "response must be sent via Telegram API"
+    method, payload = env.api.sent[0]
+    assert method == "sendMessage"
+    assert payload["chat_id"] == env.chat_id
+    assert "Записал" in payload["text"]
 
-        assert captured_updates, "normalize_update must emit at least one event"
-        normalized = captured_updates[0]
-        assert "ts" in normalized
-        ts = normalized["ts"]
-        assert isinstance(ts, datetime)
-        assert ts.tzinfo is UTC
-        assert int(ts.timestamp()) == message_date
+    assert env.api.offsets
+    assert env.api.offsets[0] is None
+    if len(env.api.offsets) > 1:
+        assert env.api.offsets[1] == 102
 
-    asyncio.run(_run())
+    assert env.captured_updates, "normalize_update must emit at least one event"
+    normalized = env.captured_updates[0]
+    assert "ts" in normalized
+    ts = normalized["ts"]
+    assert isinstance(ts, datetime)
+    assert ts.tzinfo is UTC
+    assert int(ts.timestamp()) == env.message_date
+
+    return ident
+
+
+async def assert_export_document(env: PollingEnvironment, ident) -> None:
+    """Publish an export request and verify Telegram document delivery."""
+
+    env.api.sent_event.clear()
+    await env.bus.publish(
+        "export.request",
+        {"pid": ident.pid, "chat_id": env.chat_id},
+    )
+    await asyncio.wait_for(env.api.sent_event.wait(), timeout=1)
+
+    method, payload = env.api.sent[-1]
+    assert method == "sendDocument"
+    params = payload["params"]
+    assert params["chat_id"] == env.chat_id
+    assert params["caption"] == "Готов экспорт данных. Файл во вложении."
+    files = payload["files"]
+    assert "document" in files
+    filename, content, mime = files["document"]
+    assert filename.endswith(".csv")
+    assert mime == "text/csv"
+    assert b"ts,mood,note" in content
+
+
+@pytest.mark.asyncio
+async def test_polling_transport_integration(tmp_path: Path) -> None:
+    """Verify that polling transport orchestrates agents and responders."""
+
+    env = await setup_polling_environment(tmp_path)
+    await run_polling_cycle(env)
+    ident = await assert_polling_response(env)
+    await assert_export_document(env, ident)
 
 
 def test_telegram_responder_sends_photo() -> None:
