@@ -1,4 +1,4 @@
-"""Event-driven agents used by the Emotion Diary worker."""
+"""Exports for the event-driven agents used by the Emotion Diary bot."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Command line entry-point for Emotion Diary bot services."""
+"""Command-line interface for running Emotion Diary services."""
 
 from __future__ import annotations
 
