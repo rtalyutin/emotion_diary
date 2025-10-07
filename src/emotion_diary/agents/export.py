@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import csv
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
 
 from emotion_diary.event_bus import Event, EventBus
 from emotion_diary.storage import Entry, Storage
@@ -106,7 +106,7 @@ class Export:
             Absolute path to the generated CSV file.
 
         """
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         file_path = self.export_dir / f"{pid}-{timestamp}.csv"
         with file_path.open("w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile)

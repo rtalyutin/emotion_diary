@@ -6,10 +6,11 @@ import asyncio
 import json
 import logging
 import os
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Any
 from urllib import request as urlrequest
 
 from emotion_diary.event_bus import Event, EventBus
@@ -69,7 +70,7 @@ class TelegramAPI:
         """
         url = f"{self.base_url}{method}"
         payload = dict(params or {})
-        headers: Dict[str, str] = {}
+        headers: dict[str, str] = {}
         data: bytes
         if files:
             boundary, data = _encode_multipart_formdata(payload, files)
@@ -82,7 +83,9 @@ class TelegramAPI:
         def _sync_request() -> Any:
             """Perform the blocking HTTP request in a thread."""
             req = urlrequest.Request(url, data=data, headers=headers, method="POST")
-            with urlrequest.urlopen(req, timeout=self.timeout) as response:  # type: ignore[call-arg]
+            with urlrequest.urlopen(
+                req, timeout=self.timeout
+            ) as response:  # nosec B310 - Telegram API over HTTPS
                 body = response.read().decode("utf-8")
             parsed = json.loads(body)
             if not parsed.get("ok"):
@@ -110,7 +113,7 @@ class TelegramAPI:
             List of updates represented as dictionaries.
 
         """
-        params: Dict[str, Any] = {"timeout": timeout}
+        params: dict[str, Any] = {"timeout": timeout}
         if offset is not None:
             params["offset"] = offset
         if allowed_updates is not None:
@@ -133,13 +136,13 @@ class TelegramAPI:
         **extra: Any,
     ) -> Any:
         """Send a photo to the user, uploading if necessary."""
-        params: Dict[str, Any] = {"chat_id": chat_id, **extra}
+        params: dict[str, Any] = {"chat_id": chat_id, **extra}
         if caption:
             params["caption"] = caption
         if parse_mode:
             params["parse_mode"] = parse_mode
 
-        files: Dict[str, tuple[str, bytes, str]] | None = None
+        files: dict[str, tuple[str, bytes, str]] | None = None
         photo_path = Path(photo)
         if photo_path.exists() and photo_path.is_file():
             content = photo_path.read_bytes()
@@ -157,30 +160,26 @@ def _encode_multipart_formdata(
     boundary = os.urandom(16).hex()
     body = bytearray()
     for name, value in fields.items():
-        body.extend(f"--{boundary}\r\n".encode("utf-8"))
-        body.extend(
-            f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8")
-        )
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
         if isinstance(value, bytes):
             body.extend(value)
         else:
             body.extend(str(value).encode("utf-8"))
         body.extend(b"\r\n")
     for name, (filename, content, content_type) in files.items():
-        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(f"--{boundary}\r\n".encode())
         body.extend(
-            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'.encode(
-                "utf-8"
-            )
+            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'.encode()
         )
-        body.extend(f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"))
+        body.extend(f"Content-Type: {content_type}\r\n\r\n".encode())
         body.extend(content)
         body.extend(b"\r\n")
-    body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+    body.extend(f"--{boundary}--\r\n".encode())
     return boundary, bytes(body)
 
 
-def normalize_update(update: Mapping[str, Any]) -> Dict[str, Any]:
+def normalize_update(update: Mapping[str, Any]) -> dict[str, Any]:
     """Convert Telegram update payload to internal ``tg.update`` structure.
 
     Args:
@@ -190,7 +189,7 @@ def normalize_update(update: Mapping[str, Any]) -> Dict[str, Any]:
         Normalised payload understood by the event bus.
 
     """
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "update_id": update.get("update_id"),
         "raw": dict(update),
     }
@@ -206,8 +205,8 @@ def normalize_update(update: Mapping[str, Any]) -> Dict[str, Any]:
         if "message_id" in message:
             payload["message_id"] = message.get("message_id")
         ts = message.get("date")
-        if isinstance(ts, (int, float)):
-            payload["ts"] = datetime.fromtimestamp(int(ts), tz=timezone.utc)
+        if isinstance(ts, int | float):
+            payload["ts"] = datetime.fromtimestamp(int(ts), tz=UTC)
         elif isinstance(ts, str):
             try:
                 payload["ts"] = datetime.fromisoformat(ts)
@@ -230,7 +229,7 @@ def normalize_update(update: Mapping[str, Any]) -> Dict[str, Any]:
             payload.setdefault("from_id", from_user.get("id"))
 
     if "ts" not in payload:
-        payload["ts"] = datetime.now(timezone.utc)
+        payload["ts"] = datetime.now(UTC)
     return payload
 
 
@@ -303,7 +302,7 @@ async def run_polling(
 
     """
     logger.info("Starting polling loop")
-    offset: Optional[int] = None
+    offset: int | None = None
     try:
         while True:
             try:
@@ -376,7 +375,7 @@ class WebhookServer:
 
     async def _read_request(
         self, reader: asyncio.StreamReader
-    ) -> tuple[str, Dict[str, str], bytes] | None:
+    ) -> tuple[str, dict[str, str], bytes] | None:
         """Read a minimal HTTP request from the stream."""
         data = b""
         while b"\r\n\r\n" not in data:
@@ -393,7 +392,7 @@ class WebhookServer:
             method, _path, _protocol = request_line.split(" ", 2)
         except Exception:
             return None
-        headers: Dict[str, str] = {}
+        headers: dict[str, str] = {}
         for line in header_lines[1:]:
             if not line or ":" not in line:
                 continue

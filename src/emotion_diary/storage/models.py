@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -15,7 +15,7 @@ class Ident:
     chat_id: int
     created_at: datetime
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the dataclass to a serialisable dictionary."""
         return {"pid": self.pid, "chat_id": self.chat_id, "created_at": self.created_at}
 
@@ -29,7 +29,7 @@ class User:
     notify_hour: int
     created_at: datetime
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the dataclass to a serialisable dictionary."""
         return {
             "pid": self.pid,
@@ -43,13 +43,13 @@ class User:
 class Entry:
     """Mood journal entry persisted for a user."""
 
-    id: Optional[int]
+    id: int | None
     pid: str
     ts: datetime
     mood: int
-    note: Optional[str] = None
+    note: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the dataclass to a serialisable dictionary."""
         return {
             "id": self.id,
