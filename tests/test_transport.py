@@ -13,6 +13,9 @@ from emotion_diary.agents import CheckinWriter, Dedup, Export, Notifier, Router
 from emotion_diary.bot.transport import (
     TelegramResponder,
     WebhookServer,
+    _extract_callback_fields,
+    _extract_message_fields,
+    normalize_update,
     run_polling,
 )
 from emotion_diary.event_bus import Event, EventBus
@@ -274,3 +277,68 @@ def test_webhook_server_validates_secret_and_publishes() -> None:
         assert not received
 
     asyncio.run(_run())
+
+
+def test_extract_message_fields_parses_timestamp_variants() -> None:
+    """Ensure message helper normalises chat, text, identifiers, and timestamps."""
+
+    timestamp = int(datetime(2024, 1, 15, tzinfo=UTC).timestamp())
+    message = {
+        "chat": {"id": 123},
+        "text": "hello",
+        "message_id": 7,
+        "date": timestamp,
+    }
+
+    fields = _extract_message_fields(message)
+
+    assert fields["chat_id"] == 123
+    assert fields["text"] == "hello"
+    assert fields["message_id"] == 7
+    assert fields["ts"].tzinfo is UTC
+    assert int(fields["ts"].timestamp()) == timestamp
+
+    iso_message = {"date": "2024-02-03T10:11:12+00:00"}
+    fields_iso = _extract_message_fields(iso_message)
+    assert fields_iso["ts"].isoformat() == "2024-02-03T10:11:12+00:00"
+
+
+def test_extract_callback_fields_merges_message_and_user() -> None:
+    """Ensure callback helper combines callback data, message, and sender info."""
+
+    callback = {
+        "data": "payload",
+        "message": {"chat": {"id": 777}, "message_id": 99},
+        "from": {"id": 42},
+    }
+
+    fields = _extract_callback_fields(callback)
+
+    assert fields["callback_data"] == "payload"
+    assert fields["chat_id"] == 777
+    assert fields["message_id"] == 99
+    assert fields["from_id"] == 42
+
+
+def test_normalize_update_handles_callbacks_and_messages() -> None:
+    """Verify ``normalize_update`` orchestrates message and callback helpers."""
+
+    ts = "2024-01-01T00:00:00+00:00"
+    update = {
+        "update_id": 1,
+        "message": {"chat": {"id": 5}, "date": ts},
+        "callback_query": {
+            "data": "choice",
+            "from": {"id": 10},
+            "message": {"chat": {"id": 6}, "message_id": 11},
+        },
+    }
+
+    normalised = normalize_update(update)
+
+    assert normalised["update_id"] == 1
+    assert normalised["callback_data"] == "choice"
+    assert normalised["from_id"] == 10
+    assert normalised["chat_id"] == 6  # callback message overrides original chat
+    assert normalised["message_id"] == 11
+    assert "ts" in normalised

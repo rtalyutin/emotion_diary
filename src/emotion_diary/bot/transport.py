@@ -181,57 +181,80 @@ def _encode_multipart_formdata(
     return boundary, bytes(body)
 
 
+def _extract_message_fields(message: Mapping[str, Any]) -> dict[str, Any]:
+    """Return normalised fields derived from a Telegram message payload."""
+
+    fields: dict[str, Any] = {}
+    chat = message.get("chat")
+    if isinstance(chat, Mapping):
+        chat_id = chat.get("id")
+        if chat_id is not None:
+            fields["chat_id"] = chat_id
+    if "text" in message:
+        fields["text"] = message.get("text")
+    if "message_id" in message:
+        fields["message_id"] = message.get("message_id")
+
+    ts = message.get("date")
+    parsed_ts = _parse_timestamp(ts)
+    if parsed_ts is not None:
+        fields["ts"] = parsed_ts
+
+    return fields
+
+
+def _extract_callback_fields(callback: Mapping[str, Any]) -> dict[str, Any]:
+    """Return fields derived from a Telegram callback query payload."""
+
+    fields: dict[str, Any] = {}
+    data = callback.get("data")
+    if data is not None:
+        fields["callback_data"] = data
+
+    message = callback.get("message")
+    if isinstance(message, Mapping):
+        fields.update(_extract_message_fields(message))
+
+    from_user = callback.get("from")
+    if isinstance(from_user, Mapping):
+        from_id = from_user.get("id")
+        if from_id is not None:
+            fields.setdefault("from_id", from_id)
+
+    return fields
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    """Convert Telegram ``date`` fields to :class:`datetime` instances."""
+
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(int(value), tz=UTC)
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
 def normalize_update(update: Mapping[str, Any]) -> dict[str, Any]:
-    """Convert Telegram update payload to internal ``tg.update`` structure.
+    """Convert Telegram update payload to internal ``tg.update`` structure."""
 
-    Args:
-        update: Raw update received from Telegram.
-
-    Returns:
-        Normalised payload understood by the event bus.
-
-    """
     payload: dict[str, Any] = {
         "update_id": update.get("update_id"),
         "raw": dict(update),
     }
 
-    def _extract_message(message: Mapping[str, Any]) -> None:
-        """Populate common fields based on a Telegram message payload."""
-        chat = message.get("chat") or {}
-        chat_id = chat.get("id")
-        if chat_id is not None:
-            payload["chat_id"] = chat_id
-        if "text" in message:
-            payload["text"] = message.get("text")
-        if "message_id" in message:
-            payload["message_id"] = message.get("message_id")
-        ts = message.get("date")
-        if isinstance(ts, (int, float)):
-            payload["ts"] = datetime.fromtimestamp(int(ts), tz=UTC)
-        elif isinstance(ts, str):
-            try:
-                payload["ts"] = datetime.fromisoformat(ts)
-            except ValueError:
-                pass
+    for key in ("message", "edited_message"):
+        candidate = update.get(key)
+        if isinstance(candidate, Mapping):
+            payload.update(_extract_message_fields(candidate))
 
-    if "message" in update and isinstance(update["message"], Mapping):
-        _extract_message(update["message"])
-    if "edited_message" in update and isinstance(update["edited_message"], Mapping):
-        _extract_message(update["edited_message"])
-    if "callback_query" in update and isinstance(update["callback_query"], Mapping):
-        callback = update["callback_query"]
-        data = callback.get("data")
-        if data is not None:
-            payload["callback_data"] = data
-        if "message" in callback and isinstance(callback["message"], Mapping):
-            _extract_message(callback["message"])
-        from_user = callback.get("from") or {}
-        if from_user.get("id") is not None:
-            payload.setdefault("from_id", from_user.get("id"))
+    callback = update.get("callback_query")
+    if isinstance(callback, Mapping):
+        payload.update(_extract_callback_fields(callback))
 
-    if "ts" not in payload:
-        payload["ts"] = datetime.now(UTC)
+    payload.setdefault("ts", datetime.now(UTC))
     return payload
 
 
