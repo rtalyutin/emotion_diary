@@ -1,4 +1,5 @@
 # emotion_diary
+[![CI](https://github.com/emotion-diary/emotion_diary/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/emotion-diary/emotion_diary/actions/workflows/ci.yml)
 Дневник эмоций бот
 
 ## Overview
@@ -138,6 +139,11 @@ SLA: время от нажатия до ответа ≤1.5 с.
 
    Команда `pre-commit run --all-files` выполнит форматирование (`ruff`, `black`) и статический анализ (`mypy`, `bandit`, `pip-audit`).
    Дополнительно она запустит тесты под покрытием (`coverage run -m pytest` и `coverage report --fail-under=85`).
+
+## CI и качество
+
+- Любые pull request'ы должны проходить пайплайн [CI](https://github.com/emotion-diary/emotion_diary/actions/workflows/ci.yml) на ветке `main` перед merge.
+- Локально перед отправкой изменений выполните `pre-commit run --all-files`, чтобы получить те же проверки, что и на CI (`ruff`, `mypy --strict`, `bandit`, `pip-audit`, `pytest` под покрытием).
 
 ## Конфигурация
 
