@@ -20,77 +20,173 @@ from emotion_diary.event_bus import Event, EventBus
 from emotion_diary.storage import SQLiteAdapter, Storage
 
 
+Responses = list[dict[str, Any]]
+
+
+def create_agent_environment(tmp_path: Path) -> tuple[EventBus, Storage, Path, Responses]:
+    """Instantiate agents and capture outgoing responses for assertions."""
+
+    bus = EventBus()
+    storage = Storage(SQLiteAdapter(":memory:"))
+    export_dir = tmp_path / "exports"
+
+    Dedup(bus)
+    Router(bus, storage)
+    CheckinWriter(bus, storage)
+    PetRender(bus)
+    Notifier(bus)
+    Export(bus, storage, export_dir)
+    Delete(bus, storage)
+
+    responses: Responses = []
+
+    def capture_response(event: Event) -> None:
+        responses.append(event.payload)
+
+    bus.subscribe("tg.response", capture_response)
+    return bus, storage, export_dir, responses
+
+
+async def perform_checkin(
+    bus: EventBus,
+    storage: Storage,
+    responses: Responses,
+    *,
+    chat_id: int,
+    now: datetime,
+) -> int:
+    """Publish a mood check-in and ensure it is persisted and acknowledged."""
+
+    await bus.publish(
+        "tg.update",
+        {
+            "chat_id": chat_id,
+            "text": "/checkin good",
+            "update_id": 1,
+            "ts": now,
+        },
+    )
+    ident = storage.get_or_create_ident(chat_id)
+    entries = storage.list_entries(ident.pid)
+    assert len(entries) == 1
+    assert entries[0].mood == 1
+    assert any("Записал настроение" in resp["text"] for resp in responses)
+    return ident.pid
+
+
+async def verify_deduplication(
+    bus: EventBus, storage: Storage, *, pid: int, chat_id: int, now: datetime
+) -> None:
+    """Emit a duplicate update and ensure it is ignored by the flow."""
+
+    await bus.publish(
+        "tg.update",
+        {
+            "chat_id": chat_id,
+            "text": "/checkin good",
+            "update_id": 1,
+            "ts": now + timedelta(minutes=1),
+        },
+    )
+    assert len(storage.list_entries(pid)) == 1
+
+
+async def verify_export(
+    bus: EventBus,
+    storage: Storage,
+    responses: Responses,
+    export_dir: Path,
+    *,
+    pid: int,
+    chat_id: int,
+    now: datetime,
+) -> None:
+    """Request export and ensure files and notifications are produced."""
+
+    storage.ensure_user_record(pid, notify_hour=now.hour)
+    assert (pid, chat_id) in storage.due_users(now.hour)
+
+    responses.clear()
+    await bus.publish("export.request", {"pid": pid, "chat_id": chat_id})
+    export_files = list(export_dir.glob("*.csv"))
+    assert export_files, "export file must be created"
+    assert any(
+        ("text" in resp and "Готов экспорт данных" in resp["text"])
+        or ("caption" in resp and "Готов экспорт данных" in resp["caption"])
+        for resp in responses
+    )
+
+
+async def verify_delete(
+    bus: EventBus,
+    storage: Storage,
+    responses: Responses,
+    *,
+    pid: int,
+    chat_id: int,
+) -> None:
+    """Delete stored data and check that records and notifications are cleared."""
+
+    responses.clear()
+    await bus.publish("delete.request", {"pid": pid, "chat_id": chat_id})
+    assert storage.list_entries(pid) == []
+    assert any("данные удалены" in resp["text"].lower() for resp in responses)
+
+
+async def exercise_checkin_export_delete_flow(
+    bus: EventBus,
+    storage: Storage,
+    responses: Responses,
+    export_dir: Path,
+    *,
+    chat_id: int,
+    now: datetime,
+) -> None:
+    """Drive the check-in, export, and delete path end-to-end."""
+
+    pid = await perform_checkin(
+        bus,
+        storage,
+        responses,
+        chat_id=chat_id,
+        now=now,
+    )
+    await verify_deduplication(bus, storage, pid=pid, chat_id=chat_id, now=now)
+    await verify_export(
+        bus,
+        storage,
+        responses,
+        export_dir,
+        pid=pid,
+        chat_id=chat_id,
+        now=now,
+    )
+    await verify_delete(
+        bus,
+        storage,
+        responses,
+        pid=pid,
+        chat_id=chat_id,
+    )
+
+
 def test_checkin_export_delete_flow(tmp_path: Path) -> None:
     """Ensure the check-in, export, and delete flow works end-to-end."""
 
-    async def _run() -> None:
-        """Drive the complete agent sequence using in-memory storage."""
-        bus = EventBus()
-        storage = Storage(SQLiteAdapter(":memory:"))
-        export_dir = tmp_path / "exports"
+    bus, storage, export_dir, responses = create_agent_environment(tmp_path)
+    now = datetime.now(UTC)
+    chat_id = 1001
 
-        Dedup(bus)
-        Router(bus, storage)
-        CheckinWriter(bus, storage)
-        PetRender(bus)
-        Notifier(bus)
-        Export(bus, storage, export_dir)
-        Delete(bus, storage)
-
-        responses: list[dict[str, Any]] = []
-
-        def capture_response(event: Event) -> None:
-            """Collect responses emitted during the flow."""
-            responses.append(event.payload)
-
-        bus.subscribe("tg.response", capture_response)
-
-        now = datetime.now(UTC)
-        await bus.publish(
-            "tg.update",
-            {
-                "chat_id": 1001,
-                "text": "/checkin good",
-                "update_id": 1,
-                "ts": now,
-            },
+    asyncio.run(
+        exercise_checkin_export_delete_flow(
+            bus,
+            storage,
+            responses,
+            export_dir,
+            chat_id=chat_id,
+            now=now,
         )
-        ident = storage.get_or_create_ident(1001)
-        entries = storage.list_entries(ident.pid)
-        assert len(entries) == 1
-        assert entries[0].mood == 1
-        assert any("Записал настроение" in resp["text"] for resp in responses)
-
-        await bus.publish(
-            "tg.update",
-            {
-                "chat_id": 1001,
-                "text": "/checkin good",
-                "update_id": 1,
-                "ts": now + timedelta(minutes=1),
-            },
-        )
-        assert len(storage.list_entries(ident.pid)) == 1
-
-        storage.ensure_user_record(ident.pid, notify_hour=now.hour)
-        assert (ident.pid, 1001) in storage.due_users(now.hour)
-
-        responses.clear()
-        await bus.publish("export.request", {"pid": ident.pid, "chat_id": 1001})
-        export_files = list(export_dir.glob("*.csv"))
-        assert export_files, "export file must be created"
-        assert any(
-            ("text" in resp and "Готов экспорт данных" in resp["text"])
-            or ("caption" in resp and "Готов экспорт данных" in resp["caption"])
-            for resp in responses
-        )
-
-        responses.clear()
-        await bus.publish("delete.request", {"pid": ident.pid, "chat_id": 1001})
-        assert storage.list_entries(ident.pid) == []
-        assert any("данные удалены" in resp["text"].lower() for resp in responses)
-
-    asyncio.run(_run())
+    )
 
 
 def test_notifier_ping_request_keyboard() -> None:
