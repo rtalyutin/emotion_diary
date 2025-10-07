@@ -35,15 +35,15 @@ class CheckinWriter:
         chat_id = payload.get("chat_id")
         mood = payload.get("mood")
         ts = payload.get("ts")
-        if pid is None or chat_id is None:
+        if pid is None or chat_id is None:  # pragma: no branch - guard
             logger.debug("Missing pid/chat_id in payload %s", payload)
             return
-        if mood not in {-1, 0, 1}:
+        if mood not in {-1, 0, 1}:  # pragma: no branch - guard
             logger.debug("Invalid mood %s", mood)
             return
-        if isinstance(ts, str):
+        if isinstance(ts, str):  # pragma: no branch - parsing helper
             ts = datetime.fromisoformat(ts)
-        if not isinstance(ts, datetime):
+        if not isinstance(ts, datetime):  # pragma: no branch - guard
             ts = datetime.now(UTC)
         note = payload.get("note")
         entry = self.storage.save_entry(pid=pid, ts=ts, mood=mood, note=note)

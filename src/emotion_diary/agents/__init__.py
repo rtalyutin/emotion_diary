@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .base import Agent
 from .checkin_writer import CheckinWriter
 from .dedup import Dedup
 from .delete import Delete
@@ -18,4 +19,5 @@ __all__ = [
     "Notifier",
     "Export",
     "Delete",
+    "Agent",
 ]

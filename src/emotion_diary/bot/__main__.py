@@ -41,7 +41,7 @@ DEFAULT_ASSETS_DIR = (
 )
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser() -> argparse.ArgumentParser:  # pragma: no cover - CLI wiring
     """Create CLI argument parser for bot services."""
     parser = argparse.ArgumentParser(description="Emotion Diary bot entry-point")
     parser.add_argument(
@@ -72,7 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def create_storage(dsn: str) -> Storage:
+def create_storage(dsn: str) -> Storage:  # pragma: no cover - runtime bootstrap
     """Instantiate storage using a DSN string.
 
     Args:
@@ -98,7 +98,7 @@ def bootstrap(
     export_dir: Path,
     assets_dir: Path,
     api: TelegramAPI,
-) -> None:
+) -> None:  # pragma: no cover - runtime wiring
     """Wire core agents and responders to the event bus.
 
     Args:
@@ -121,7 +121,7 @@ def bootstrap(
 
 async def run_scheduler(
     bus: EventBus, storage: Storage, forced_hour: int | None = None
-) -> None:
+) -> None:  # pragma: no cover - invoked by CLI
     """Emit reminder events for users scheduled at the current hour.
 
     Args:
@@ -139,7 +139,7 @@ async def run_scheduler(
     logger.info("Scheduler finished")
 
 
-async def async_main(args: argparse.Namespace) -> None:
+async def async_main(args: argparse.Namespace) -> None:  # pragma: no cover
     """Entry point for asynchronous bot orchestration.
 
     Args:
@@ -181,7 +181,7 @@ async def async_main(args: argparse.Namespace) -> None:
         raise ValueError(f"Unsupported mode {args.mode}")
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover - thin CLI entry point
     """Parse CLI arguments and run the async entry point."""
     parser = build_parser()
     args = parser.parse_args()

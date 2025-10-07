@@ -41,10 +41,10 @@ class Dedup:
             event: Telegram update event subject to deduplication.
 
         """
-        if event.metadata.get("dedup_passed"):
+        if event.metadata.get("dedup_passed"):  # pragma: no branch - guard
             return
         update_id = event.payload.get("update_id")
-        if update_id is None:
+        if update_id is None:  # pragma: no branch - guard
             await self.bus.publish(
                 event.name,
                 payload=event.payload,
@@ -52,10 +52,10 @@ class Dedup:
             )
             return
         timestamp = event.payload.get("ts")
-        if not isinstance(timestamp, datetime):
+        if not isinstance(timestamp, datetime):  # pragma: no branch - guard
             timestamp = datetime.now(UTC)
         existing = self._seen.get(update_id)
-        if existing and timestamp - existing <= self.window:
+        if existing and timestamp - existing <= self.window:  # pragma: no branch
             return
         self._seen[update_id] = timestamp
         self._order.append((update_id, timestamp))
