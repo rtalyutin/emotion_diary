@@ -29,8 +29,12 @@ dev = [
   "ruff>=0.2",
 ]
 
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = [
   "emotion_diary",
   "emotion_diary.*",
