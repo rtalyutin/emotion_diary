@@ -81,12 +81,21 @@ def test_polling_transport_integration(tmp_path: Path) -> None:
         Export(bus, storage, tmp_path)
         Notifier(bus)
 
+        captured_updates: list[dict[str, Any]] = []
+
+        def capture_update(event: Event) -> None:
+            captured_updates.append(dict(event.payload))
+
+        bus.subscribe("tg.update", capture_update)
+
+        message_date = int(datetime.now(UTC).timestamp())
+
         updates: list[dict[str, Any]] = [
             {
                 "update_id": 101,
                 "message": {
                     "message_id": 1,
-                    "date": int(datetime.now(UTC).timestamp()),
+                    "date": message_date,
                     "chat": {"id": 555},
                     "text": "/checkin good",
                 },
@@ -140,6 +149,14 @@ def test_polling_transport_integration(tmp_path: Path) -> None:
         assert api.offsets[0] is None
         if len(api.offsets) > 1:
             assert api.offsets[1] == 102
+
+        assert captured_updates, "normalize_update must emit at least one event"
+        normalized = captured_updates[0]
+        assert "ts" in normalized
+        ts = normalized["ts"]
+        assert isinstance(ts, datetime)
+        assert ts.tzinfo is UTC
+        assert int(ts.timestamp()) == message_date
 
     asyncio.run(_run())
 

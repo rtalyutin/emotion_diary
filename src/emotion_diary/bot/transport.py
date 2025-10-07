@@ -205,7 +205,7 @@ def normalize_update(update: Mapping[str, Any]) -> dict[str, Any]:
         if "message_id" in message:
             payload["message_id"] = message.get("message_id")
         ts = message.get("date")
-        if isinstance(ts, int | float):
+        if isinstance(ts, (int, float)):
             payload["ts"] = datetime.fromtimestamp(int(ts), tz=UTC)
         elif isinstance(ts, str):
             try:
