@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import asyncio
 
-from emotion_diary.event_bus import EventBus
+from emotion_diary.event_bus import Event, EventBus
 
 
-def test_event_bus_publish_subscribe():
+def test_event_bus_publish_subscribe() -> None:
     """Ensure that events published on the bus reach subscribed handlers."""
 
-    async def _run():
+    async def _run() -> None:
         """Run the async test scenario for the event bus."""
         bus = EventBus()
-        received = []
+        received: list[int] = []
 
-        async def handler(event):
+        async def handler(event: Event) -> None:
             """Capture published events for later assertions."""
             received.append(event.payload["value"])
 
