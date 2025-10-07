@@ -1,4 +1,4 @@
-"""Agent responsible for CSV exports."""
+"""Agent responsible for producing CSV exports of mood entries."""
 
 from __future__ import annotations
 

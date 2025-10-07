@@ -1,4 +1,4 @@
-"""Telegram transport utilities for Emotion Diary bot."""
+"""Telegram transport utilities used by the Emotion Diary bot."""
 
 from __future__ import annotations
 
