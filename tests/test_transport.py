@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 from emotion_diary.agents import CheckinWriter, Dedup, Export, Notifier, Router
 from emotion_diary.bot.transport import (
@@ -19,44 +22,56 @@ from emotion_diary.storage import SQLiteAdapter, Storage
 class FakeTelegramAPI:
     """In-memory stand-in for the Telegram API used during tests."""
 
-    def __init__(self, updates: list[dict]):
+    def __init__(self, updates: list[dict[str, Any]]) -> None:
         """Store prepared updates and initialise tracking attributes."""
-        self._updates = list(updates)
-        self.sent: list[tuple[str, dict]] = []
+        self._updates: list[dict[str, Any]] = list(updates)
+        self.sent: list[tuple[str, dict[str, Any]]] = []
         self.offsets: list[int | None] = []
         self.sent_event = asyncio.Event()
 
-    async def get_updates(self, *, offset=None, timeout=None, allowed_updates=None):
+    async def get_updates(
+        self,
+        *,
+        offset: int | None = None,
+        timeout: int | None = None,
+        allowed_updates: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """Return queued updates while recording offsets."""
         self.offsets.append(offset)
         result = list(self._updates)
         self._updates.clear()
         return result
 
-    async def send_message(self, chat_id, text, **extra):
+    async def send_message(self, chat_id: int, text: str, **extra: Any) -> None:
         """Record outgoing ``sendMessage`` requests."""
         self.sent.append(("sendMessage", {"chat_id": chat_id, "text": text, **extra}))
         self.sent_event.set()
 
-    async def send_photo(self, chat_id, photo, **extra):
+    async def send_photo(self, chat_id: int, photo: str, **extra: Any) -> None:
         """Record outgoing ``sendPhoto`` requests."""
         self.sent.append(("sendPhoto", {"chat_id": chat_id, "photo": photo, **extra}))
         self.sent_event.set()
 
-    async def call_method(self, method, params=None, *, files=None):
+    async def call_method(
+        self,
+        method: str,
+        params: Mapping[str, Any] | None = None,
+        *,
+        files: Mapping[str, tuple[str, bytes, str]] | None = None,
+    ) -> None:
         """Record generic API calls, including uploaded files."""
-        payload = {"params": dict(params or {})}
+        payload: dict[str, Any] = {"params": dict(params or {})}
         if files is not None:
             payload["files"] = files
         self.sent.append((method, payload))
         self.sent_event.set()
 
 
-def test_polling_transport_integration(tmp_path):
+def test_polling_transport_integration(tmp_path: Path) -> None:
     """Verify that polling transport orchestrates agents and responders."""
     import pytest
 
-    async def _run():
+    async def _run() -> None:
         """Run the polling workflow end-to-end using in-memory dependencies."""
         bus = EventBus()
         storage = Storage(SQLiteAdapter(":memory:"))
@@ -66,7 +81,7 @@ def test_polling_transport_integration(tmp_path):
         Export(bus, storage, tmp_path)
         Notifier(bus)
 
-        updates = [
+        updates: list[dict[str, Any]] = [
             {
                 "update_id": 101,
                 "message": {
@@ -129,10 +144,10 @@ def test_polling_transport_integration(tmp_path):
     asyncio.run(_run())
 
 
-def test_telegram_responder_sends_photo():
+def test_telegram_responder_sends_photo() -> None:
     """Ensure TelegramResponder issues photo requests when sprites are provided."""
 
-    async def _run():
+    async def _run() -> None:
         """Publish a ``tg.response`` event and assert a photo send call."""
         bus = EventBus()
         api = FakeTelegramAPI([])
@@ -157,10 +172,10 @@ def test_telegram_responder_sends_photo():
     asyncio.run(_run())
 
 
-def test_telegram_responder_uploads_document(tmp_path):
+def test_telegram_responder_uploads_document(tmp_path: Path) -> None:
     """Ensure TelegramResponder uploads local files for document responses."""
 
-    async def _run():
+    async def _run() -> None:
         """Publish a ``sendDocument`` response and assert file upload behaviour."""
         bus = EventBus()
         api = FakeTelegramAPI([])
@@ -197,10 +212,10 @@ def test_telegram_responder_uploads_document(tmp_path):
     asyncio.run(_run())
 
 
-def test_webhook_server_validates_secret_and_publishes():
+def test_webhook_server_validates_secret_and_publishes() -> None:
     """Ensure webhook requests are validated and routed to the event bus."""
 
-    async def _run():
+    async def _run() -> None:
         """Run webhook request handling against the in-memory bus."""
         bus = EventBus()
         received: list[Event] = []
