@@ -1,2 +1,0 @@
-# Runtime dependencies for the Emotion Diary bot.
-psycopg[binary]>=3.1

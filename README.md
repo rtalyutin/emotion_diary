@@ -106,9 +106,9 @@ SLA: время от нажатия до ответа ≤1.5 с.
 
 ## Требования
 
-- Python 3.10 или новее.
-- Основные зависимости перечислены в [`requirements.txt`](requirements.txt).
-- Для разработки используйте [`requirements-dev.txt`](requirements-dev.txt), включающий линтеры и тестовые утилиты.
+- Python 3.11 или новее.
+- Основные зависимости описаны в [`pyproject.toml`](pyproject.toml) и устанавливаются вместе с пакетом.
+- Для разработки используйте extra-зависимость `dev`, включающую линтеры и тестовые утилиты.
 - При работе с PostgreSQL установите `psycopg[binary]` (ставится автоматически из манифеста); для SQLite достаточно стандартной библиотеки.
 
 ## Установка
@@ -125,8 +125,8 @@ SLA: время от нажатия до ответа ≤1.5 с.
 
    ```bash
    pip install --upgrade pip
-   pip install -r requirements.txt            # базовые зависимости
-   pip install -r requirements-dev.txt        # инструменты разработки (опционально)
+   pip install -e .                # базовые зависимости бота
+   pip install -e .[dev]           # инструменты разработки (опционально)
    ```
 
 ## Конфигурация
@@ -183,15 +183,15 @@ alembic downgrade -1      # откатить последнюю миграцию
 Перед пушем запускайте проверки качества и тесты:
 
 ```bash
-python -m venv .venv-requirements && . .venv-requirements/bin/activate && \
+python -m venv .venv-tests && . .venv-tests/bin/activate && \
     pip install --upgrade pip && \
-    pip install -r requirements.txt  # проверка чистой установки зависимостей
+    pip install -e .[dev]          # установка зависимостей с инструментами разработки
 
 ruff check emotion_diary            # линтер кода
 mypy emotion_diary                  # статическая типизация
 pytest                              # юнит- и интеграционные тесты
 ```
 
-При запуске в CI шаг проверки зависимостей можно вынести в отдельный job с `pip install -r requirements.txt` в чистом окружении.
+При запуске в CI шаг проверки зависимостей можно вынести в отдельный job с `pip install -e .[dev]` в чистом окружении.
 
 Для автоматизации можно создать Makefile или использовать скрипты CI/CD.
