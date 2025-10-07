@@ -6,8 +6,11 @@ import asyncio
 import inspect
 import logging
 from collections import defaultdict
+from collections.abc import Awaitable, Callable, Iterable, MutableMapping
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, Iterable, List, MutableMapping, Optional
+from typing import (
+    Any,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +20,16 @@ class Event:
     """Domain event with payload and metadata."""
 
     name: str
-    payload: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def copy(self, *, name: Optional[str] = None, payload: Optional[MutableMapping[str, Any]] = None,
-             metadata: Optional[MutableMapping[str, Any]] = None) -> "Event":
+    def copy(
+        self,
+        *,
+        name: str | None = None,
+        payload: MutableMapping[str, Any] | None = None,
+        metadata: MutableMapping[str, Any] | None = None,
+    ) -> Event:
         """Create a shallow copy optionally overriding event attributes."""
         return Event(
             name=name or self.name,
@@ -38,7 +46,7 @@ class EventBus:
 
     def __init__(self) -> None:
         """Initialise subscriber storage and concurrency primitives."""
-        self._subscribers: Dict[str, List[EventHandler]] = defaultdict(list)
+        self._subscribers: dict[str, list[EventHandler]] = defaultdict(list)
         self._lock = asyncio.Lock()
 
     def subscribe(self, event_name: str | Iterable[str], handler: EventHandler) -> None:
@@ -50,22 +58,32 @@ class EventBus:
         if not event_names:
             raise ValueError("event_name must not be empty")
         for name in event_names:
-            logger.debug("Subscribing %s to event %s", getattr(handler, "__qualname__", repr(handler)), name)
+            logger.debug(
+                "Subscribing %s to event %s",
+                getattr(handler, "__qualname__", repr(handler)),
+                name,
+            )
             self._subscribers[name].append(handler)
 
     async def publish(
-        self, event_name: str, payload: Optional[MutableMapping[str, Any]] = None,
-        metadata: Optional[MutableMapping[str, Any]] = None,
+        self,
+        event_name: str,
+        payload: MutableMapping[str, Any] | None = None,
+        metadata: MutableMapping[str, Any] | None = None,
     ) -> None:
         """Publish an event to all registered subscribers."""
-        event = Event(name=event_name, payload=dict(payload or {}), metadata=dict(metadata or {}))
+        event = Event(
+            name=event_name, payload=dict(payload or {}), metadata=dict(metadata or {})
+        )
         async with self._lock:
-            subscribers = list(self._subscribers.get(event_name, ())) + list(self._subscribers.get("*", ()))
+            subscribers = list(self._subscribers.get(event_name, ())) + list(
+                self._subscribers.get("*", ())
+            )
         if not subscribers:
             logger.debug("No subscribers for event %s", event_name)
             return
 
-        awaitables: List[Awaitable[None]] = []
+        awaitables: list[Awaitable[None]] = []
         for handler in subscribers:
             try:
                 result = handler(event)

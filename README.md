@@ -129,6 +129,16 @@ SLA: время от нажатия до ответа ≤1.5 с.
    pip install -e .[dev]           # инструменты разработки (опционально)
    ```
 
+4. (Опционально, для участия в разработке) установите и настройте pre-commit хуки:
+
+   ```bash
+   pre-commit install
+   pre-commit run --all-files
+   ```
+
+   Команда `pre-commit run --all-files` выполнит форматирование (`ruff`, `black`) и статический анализ (`mypy`, `bandit`, `pip-audit`).
+   Дополнительно она запустит тесты под покрытием (`coverage run -m pytest` и `coverage report --fail-under=85`).
+
 ## Конфигурация
 
 Обязательные переменные окружения:

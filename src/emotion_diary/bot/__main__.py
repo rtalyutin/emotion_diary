@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import logging
 import os
+from datetime import UTC
 from pathlib import Path
 
 from emotion_diary import __version__
@@ -20,7 +21,12 @@ from emotion_diary.agents import (
 )
 from emotion_diary.assets import ensure_builtin_assets
 from emotion_diary.event_bus import EventBus
-from emotion_diary.storage import PostgresAdapter, SQLiteAdapter, Storage
+from emotion_diary.storage import (
+    DatabaseAdapter,
+    PostgresAdapter,
+    SQLiteAdapter,
+    Storage,
+)
 
 from .transport import TelegramAPI, TelegramResponder, run_polling, run_webhook
 
@@ -34,12 +40,19 @@ DEFAULT_ASSETS_DIR = (
     Path(_DEFAULT_ASSETS).expanduser() if _DEFAULT_ASSETS else (BASE_DIR / "assets")
 )
 
+
 def build_parser() -> argparse.ArgumentParser:
     """Create CLI argument parser for bot services."""
     parser = argparse.ArgumentParser(description="Emotion Diary bot entry-point")
-    parser.add_argument("--mode", choices=["polling", "webhook", "scheduler"], required=True)
-    parser.add_argument("--dsn", default=f"sqlite:///{DEFAULT_SQLITE_PATH}", help="Database DSN")
-    parser.add_argument("--export-dir", default=str(DEFAULT_EXPORT_DIR), help="Directory for exports")
+    parser.add_argument(
+        "--mode", choices=["polling", "webhook", "scheduler"], required=True
+    )
+    parser.add_argument(
+        "--dsn", default=f"sqlite:///{DEFAULT_SQLITE_PATH}", help="Database DSN"
+    )
+    parser.add_argument(
+        "--export-dir", default=str(DEFAULT_EXPORT_DIR), help="Directory for exports"
+    )
     parser.add_argument(
         "--assets-dir",
         default=str(DEFAULT_ASSETS_DIR),
@@ -48,8 +61,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1", help="Webhook host")
     parser.add_argument("--port", type=int, default=8080, help="Webhook port")
     parser.add_argument("--log-level", default=os.getenv("LOG_LEVEL", "INFO"))
-    parser.add_argument("--scheduler-hour", type=int, help="Force scheduler hour instead of current UTC hour")
-    parser.add_argument("--version", action="version", version=f"emotion-diary {__version__}")
+    parser.add_argument(
+        "--scheduler-hour",
+        type=int,
+        help="Force scheduler hour instead of current UTC hour",
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"emotion-diary {__version__}"
+    )
     return parser
 
 
@@ -63,6 +82,7 @@ def create_storage(dsn: str) -> Storage:
         Configured :class:`Storage` instance.
 
     """
+    adapter: DatabaseAdapter
     if dsn.startswith("postgres"):
         adapter = PostgresAdapter(dsn)
     elif dsn.startswith("sqlite:///"):
@@ -70,6 +90,8 @@ def create_storage(dsn: str) -> Storage:
     else:
         adapter = SQLiteAdapter(dsn)
     return Storage(adapter)
+
+
 def bootstrap(
     bus: EventBus,
     storage: Storage,
@@ -97,7 +119,9 @@ def bootstrap(
     TelegramResponder(bus, api)
 
 
-async def run_scheduler(bus: EventBus, storage: Storage, forced_hour: int | None = None) -> None:
+async def run_scheduler(
+    bus: EventBus, storage: Storage, forced_hour: int | None = None
+) -> None:
     """Emit reminder events for users scheduled at the current hour.
 
     Args:
@@ -106,9 +130,9 @@ async def run_scheduler(bus: EventBus, storage: Storage, forced_hour: int | None
         forced_hour: Optional override for the hour in UTC.
 
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    hour = forced_hour if forced_hour is not None else datetime.now(timezone.utc).hour
+    hour = forced_hour if forced_hour is not None else datetime.now(UTC).hour
     logger.info("Running scheduler for hour %s", hour)
     for pid, chat_id in storage.due_users(hour):
         await bus.publish("ping.request", {"pid": pid, "chat_id": chat_id})
@@ -147,7 +171,9 @@ async def async_main(args: argparse.Namespace) -> None:
     elif args.mode == "webhook":
         secret = os.getenv("WEBHOOK_SECRET")
         if not secret:
-            raise RuntimeError("WEBHOOK_SECRET environment variable must be set for webhook mode")
+            raise RuntimeError(
+                "WEBHOOK_SECRET environment variable must be set for webhook mode"
+            )
         await run_webhook(args.host, args.port, bus, secret=secret)
     elif args.mode == "scheduler":
         await run_scheduler(bus, storage, forced_hour=args.scheduler_hour)

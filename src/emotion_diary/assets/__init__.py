@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from base64 import b64decode
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 # Base64 encoded 1x1 PNG sprites. Using inline text avoids binary blobs in the
 # repository while keeping the assets self-contained.

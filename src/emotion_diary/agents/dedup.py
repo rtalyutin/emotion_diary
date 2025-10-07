@@ -5,8 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Deque, Dict, Tuple
+from datetime import UTC, datetime, timedelta
 
 from emotion_diary.event_bus import Event, EventBus
 
@@ -17,8 +16,8 @@ class Dedup:
 
     bus: EventBus
     window: timedelta = timedelta(minutes=10)
-    _seen: Dict[int, datetime] = field(init=False, default_factory=dict)
-    _order: Deque[Tuple[int, datetime]] = field(init=False, default_factory=deque)
+    _seen: dict[int, datetime] = field(init=False, default_factory=dict)
+    _order: deque[tuple[int, datetime]] = field(init=False, default_factory=deque)
 
     def __post_init__(self) -> None:
         """Subscribe to raw Telegram updates for deduplication."""
@@ -54,7 +53,7 @@ class Dedup:
             return
         timestamp = event.payload.get("ts")
         if not isinstance(timestamp, datetime):
-            timestamp = datetime.now(timezone.utc)
+            timestamp = datetime.now(UTC)
         existing = self._seen.get(update_id)
         if existing and timestamp - existing <= self.window:
             return

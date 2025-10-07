@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import sqlite3
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Iterable, Iterator, Sequence
+from typing import Any
 
 try:  # pragma: no cover - optional dependency
     import psycopg
@@ -142,7 +143,9 @@ class SQLiteAdapter(DatabaseAdapter):
                 )
                 """
             )
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_entries_pid_ts ON entries(pid, ts)")
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_entries_pid_ts ON entries(pid, ts)"
+            )
 
     @contextmanager
     def cursor(self) -> Iterator[sqlite3.Cursor]:
@@ -209,7 +212,9 @@ class PostgresAdapter(DatabaseAdapter):  # pragma: no cover - requires psycopg
                 )
                 """
             )
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_entries_pid_ts ON entries(pid, ts)")
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_entries_pid_ts ON entries(pid, ts)"
+            )
 
     @contextmanager
     def cursor(self) -> Iterator[Any]:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from emotion_diary.event_bus import Event, EventBus
 from emotion_diary.storage import Storage
@@ -44,7 +44,7 @@ class CheckinWriter:
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts)
         if not isinstance(ts, datetime):
-            ts = datetime.now(timezone.utc)
+            ts = datetime.now(UTC)
         note = payload.get("note")
         entry = self.storage.save_entry(pid=pid, ts=ts, mood=mood, note=note)
         await self.bus.publish(

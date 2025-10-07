@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from emotion_diary.agents import CheckinWriter, Dedup, Delete, Export, Notifier, PetRender, Router
+from emotion_diary.agents import (
+    CheckinWriter,
+    Dedup,
+    Delete,
+    Export,
+    Notifier,
+    PetRender,
+    Router,
+)
 from emotion_diary.event_bus import Event, EventBus
 from emotion_diary.storage import SQLiteAdapter, Storage
 
@@ -36,7 +44,7 @@ def test_checkin_export_delete_flow(tmp_path: Path):
 
         bus.subscribe("tg.response", capture_response)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         await bus.publish(
             "tg.update",
             {
@@ -71,12 +79,8 @@ def test_checkin_export_delete_flow(tmp_path: Path):
         export_files = list(export_dir.glob("*.csv"))
         assert export_files, "export file must be created"
         assert any(
-            (
-                "text" in resp and "Готов экспорт данных" in resp["text"]
-            )
-            or (
-                "caption" in resp and "Готов экспорт данных" in resp["caption"]
-            )
+            ("text" in resp and "Готов экспорт данных" in resp["text"])
+            or ("caption" in resp and "Готов экспорт данных" in resp["caption"])
             for resp in responses
         )
 

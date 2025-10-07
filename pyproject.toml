@@ -27,6 +27,12 @@ dev = [
   "mypy>=1.10",
   "pytest>=8.0",
   "ruff>=0.2",
+  "black>=24.3",
+  "isort>=5.13",
+  "bandit>=1.7",
+  "coverage[toml]>=7.4",
+  "pip-audit>=2.7",
+  "pre-commit>=3.6",
 ]
 
 [tool.setuptools]
@@ -69,4 +75,24 @@ plugins = []
 minversion = "8.0"
 addopts = "-ra"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["emotion_diary.storage"]
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+fail_under = 85
+
+[tool.bandit]
+targets = ["src"]
+exclude = ["tests"]
+skips = ["B101"]
+
+[tool.pip-audit]
+strict = true
+require-hashes = false
+ignore-vulns = []
+skip-editable = true
 

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from emotion_diary.event_bus import Event, EventBus
 from emotion_diary.storage import Storage
@@ -59,7 +58,7 @@ class Router:
             if isinstance(ts, str):
                 ts = datetime.fromisoformat(ts)
             if not isinstance(ts, datetime):
-                ts = datetime.now(timezone.utc)
+                ts = datetime.now(UTC)
             note = payload.get("note") or payload.get("text")
             await self.bus.publish(
                 "checkin.save",
@@ -100,7 +99,7 @@ class Router:
             return "checkin"
         return None
 
-    def _resolve_mood(self, payload: dict) -> Optional[int]:
+    def _resolve_mood(self, payload: dict) -> int | None:
         """Extract the mood value from the payload.
 
         Args:

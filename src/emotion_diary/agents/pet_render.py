@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from emotion_diary.event_bus import Event, EventBus
@@ -49,7 +49,7 @@ class PetRender:
             "pid": pid,
             "chat_id": chat_id,
             "sprite": sprite,
-            "rendered_at": datetime.now(timezone.utc).isoformat(),
+            "rendered_at": datetime.now(UTC).isoformat(),
         }
         await self.bus.publish("pet.rendered", meta)
 
@@ -64,7 +64,7 @@ class PetRender:
 
         """
         options = SPRITES.get(mood, SPRITES[0])
-        sprite = random.choice(options)
+        sprite = random.choice(options)  # nosec B311 - sprite selection is non-critical
         if self.assets_dir:
             return str((self.assets_dir / sprite).resolve())
         return sprite
