@@ -31,10 +31,11 @@ class PollingEnvironment:
 
     bus: EventBus
     storage: Storage
-    api: "FakeTelegramAPI"
+    api: FakeTelegramAPI
     captured_updates: list[dict[str, Any]]
     message_date: int
     chat_id: int
+
 
 class FakeTelegramAPI:
     """In-memory stand-in for the Telegram API used during tests."""
