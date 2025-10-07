@@ -1,3 +1,5 @@
+"""End-to-end tests covering agent interactions via the event bus."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +12,10 @@ from emotion_diary.storage import SQLiteAdapter, Storage
 
 
 def test_checkin_export_delete_flow(tmp_path: Path):
+    """Ensure the check-in, export, and delete flow works end-to-end."""
+
     async def _run():
+        """Drive the complete agent sequence using in-memory storage."""
         bus = EventBus()
         storage = Storage(SQLiteAdapter(":memory:"))
         export_dir = tmp_path / "exports"
@@ -24,7 +29,12 @@ def test_checkin_export_delete_flow(tmp_path: Path):
         Delete(bus, storage)
 
         responses: list[dict] = []
-        bus.subscribe("tg.response", lambda event: responses.append(event.payload))
+
+        def capture_response(event):
+            """Collect responses emitted during the flow."""
+            responses.append(event.payload)
+
+        bus.subscribe("tg.response", capture_response)
 
         now = datetime.now(timezone.utc)
         await bus.publish(
@@ -79,13 +89,17 @@ def test_checkin_export_delete_flow(tmp_path: Path):
 
 
 def test_notifier_ping_request_keyboard():
+    """Verify that notifier produces correct inline keyboard for ping events."""
+
     async def _run():
+        """Emit a ping request and inspect the generated keyboard."""
         bus = EventBus()
         Notifier(bus)
 
         responses: list[dict] = []
 
         def capture(event):
+            """Collect outgoing responses for assertions."""
             responses.append(event.payload)
 
         bus.subscribe("tg.response", capture)
@@ -109,7 +123,10 @@ def test_notifier_ping_request_keyboard():
 
 
 def test_router_handles_callback_mood():
+    """Ensure router translates callback queries into mood check-ins."""
+
     async def _run():
+        """Simulate callback payload handling by the router."""
         bus = EventBus()
         storage = Storage(SQLiteAdapter(":memory:"))
         router = Router(bus, storage)
@@ -117,6 +134,7 @@ def test_router_handles_callback_mood():
         captured: list[dict] = []
 
         async def capture(event):
+            """Collect emitted check-in payloads."""
             captured.append(event.payload)
 
         bus.subscribe("checkin.save", capture)

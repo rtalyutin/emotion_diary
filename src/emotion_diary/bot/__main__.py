@@ -35,6 +35,7 @@ DEFAULT_ASSETS_DIR = (
 )
 
 def build_parser() -> argparse.ArgumentParser:
+    """Create CLI argument parser for bot services."""
     parser = argparse.ArgumentParser(description="Emotion Diary bot entry-point")
     parser.add_argument("--mode", choices=["polling", "webhook", "scheduler"], required=True)
     parser.add_argument("--dsn", default=f"sqlite:///{DEFAULT_SQLITE_PATH}", help="Database DSN")
@@ -53,6 +54,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def create_storage(dsn: str) -> Storage:
+    """Instantiate storage using a DSN string.
+
+    Args:
+        dsn: Database connection string supporting SQLite or PostgreSQL.
+
+    Returns:
+        Configured :class:`Storage` instance.
+
+    """
     if dsn.startswith("postgres"):
         adapter = PostgresAdapter(dsn)
     elif dsn.startswith("sqlite:///"):
@@ -67,6 +77,16 @@ def bootstrap(
     assets_dir: Path,
     api: TelegramAPI,
 ) -> None:
+    """Wire core agents and responders to the event bus.
+
+    Args:
+        bus: Shared event bus instance.
+        storage: Storage facade used by agents.
+        export_dir: Directory where exports will be generated.
+        assets_dir: Directory with sprite assets.
+        api: Telegram API client used for outgoing messages.
+
+    """
     Dedup(bus)
     Router(bus, storage)
     CheckinWriter(bus, storage)
@@ -78,6 +98,14 @@ def bootstrap(
 
 
 async def run_scheduler(bus: EventBus, storage: Storage, forced_hour: int | None = None) -> None:
+    """Emit reminder events for users scheduled at the current hour.
+
+    Args:
+        bus: Event bus used to publish events.
+        storage: Storage facade to fetch due users.
+        forced_hour: Optional override for the hour in UTC.
+
+    """
     from datetime import datetime, timezone
 
     hour = forced_hour if forced_hour is not None else datetime.now(timezone.utc).hour
@@ -88,6 +116,15 @@ async def run_scheduler(bus: EventBus, storage: Storage, forced_hour: int | None
 
 
 async def async_main(args: argparse.Namespace) -> None:
+    """Entry point for asynchronous bot orchestration.
+
+    Args:
+        args: Parsed CLI arguments.
+
+    Raises:
+        RuntimeError: If mandatory environment variables are missing.
+
+    """
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
     bot_token = os.getenv("BOT_TOKEN")
     if not bot_token:
@@ -119,6 +156,7 @@ async def async_main(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    """Parse CLI arguments and run the async entry point."""
     parser = build_parser()
     args = parser.parse_args()
     try:

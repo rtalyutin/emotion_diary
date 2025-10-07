@@ -27,6 +27,17 @@ class TelegramAPI:
     def __init__(
         self, token: str, *, base_url: str | None = None, timeout: float = 10.0
     ) -> None:
+        """Configure the Telegram Bot API client.
+
+        Args:
+            token: Bot token issued by Telegram.
+            base_url: Optional alternative API base URL.
+            timeout: Request timeout in seconds for blocking calls.
+
+        Raises:
+            ValueError: If the token is empty.
+
+        """
         if not token:
             raise ValueError("Telegram bot token must be provided")
         self.token = token
@@ -42,6 +53,20 @@ class TelegramAPI:
         *,
         files: Mapping[str, tuple[str, bytes, str]] | None = None,
     ) -> Any:
+        """Invoke an arbitrary Telegram Bot API method.
+
+        Args:
+            method: Name of the API method.
+            params: JSON-serialisable parameters for the call.
+            files: Optional mapping describing files to upload.
+
+        Returns:
+            Parsed ``result`` portion of the API response.
+
+        Raises:
+            TelegramAPIError: If Telegram reports an error response.
+
+        """
         url = f"{self.base_url}{method}"
         payload = dict(params or {})
         headers: Dict[str, str] = {}
@@ -55,6 +80,7 @@ class TelegramAPI:
         headers["Accept"] = "application/json"
 
         def _sync_request() -> Any:
+            """Perform the blocking HTTP request in a thread."""
             req = urlrequest.Request(url, data=data, headers=headers, method="POST")
             with urlrequest.urlopen(req, timeout=self.timeout) as response:  # type: ignore[call-arg]
                 body = response.read().decode("utf-8")
@@ -73,6 +99,17 @@ class TelegramAPI:
         timeout: int = 30,
         allowed_updates: Iterable[str] | None = None,
     ) -> list[dict[str, Any]]:
+        """Fetch updates from Telegram for long polling bots.
+
+        Args:
+            offset: Optional offset to resume from the last update ID.
+            timeout: Long polling timeout in seconds.
+            allowed_updates: Optional list of update types to receive.
+
+        Returns:
+            List of updates represented as dictionaries.
+
+        """
         params: Dict[str, Any] = {"timeout": timeout}
         if offset is not None:
             params["offset"] = offset
@@ -82,6 +119,7 @@ class TelegramAPI:
         return list(result or [])
 
     async def send_message(self, chat_id: int | str, text: str, **extra: Any) -> Any:
+        """Send a text message via the Telegram Bot API."""
         params = {"chat_id": chat_id, "text": text, **extra}
         return await self.call_method("sendMessage", params)
 
@@ -94,6 +132,7 @@ class TelegramAPI:
         parse_mode: str | None = None,
         **extra: Any,
     ) -> Any:
+        """Send a photo to the user, uploading if necessary."""
         params: Dict[str, Any] = {"chat_id": chat_id, **extra}
         if caption:
             params["caption"] = caption
@@ -114,6 +153,7 @@ def _encode_multipart_formdata(
     fields: Mapping[str, Any],
     files: Mapping[str, tuple[str, bytes, str]],
 ) -> tuple[str, bytes]:
+    """Encode payload and files into multipart/form-data."""
     boundary = os.urandom(16).hex()
     body = bytearray()
     for name, value in fields.items():
@@ -141,14 +181,22 @@ def _encode_multipart_formdata(
 
 
 def normalize_update(update: Mapping[str, Any]) -> Dict[str, Any]:
-    """Convert Telegram update payload to internal ``tg.update`` structure."""
+    """Convert Telegram update payload to internal ``tg.update`` structure.
 
+    Args:
+        update: Raw update received from Telegram.
+
+    Returns:
+        Normalised payload understood by the event bus.
+
+    """
     payload: Dict[str, Any] = {
         "update_id": update.get("update_id"),
         "raw": dict(update),
     }
 
     def _extract_message(message: Mapping[str, Any]) -> None:
+        """Populate common fields based on a Telegram message payload."""
         chat = message.get("chat") or {}
         chat_id = chat.get("id")
         if chat_id is not None:
@@ -194,10 +242,16 @@ class TelegramResponder:
     api: TelegramAPI
 
     def __post_init__(self) -> None:
+        """Subscribe to the event bus for outgoing responses."""
         self.bus.subscribe("tg.response", self.handle)
 
     async def handle(self, event: Event) -> None:
-        """Send ``tg.response`` payloads to Telegram."""
+        """Send ``tg.response`` payloads to Telegram.
+
+        Args:
+            event: Event emitted by the internal bus.
+
+        """
         payload = dict(event.payload)
         payload.pop("created_at", None)
         method = payload.pop("method", None)
@@ -239,8 +293,15 @@ async def run_polling(
     poll_timeout: int = 30,
     idle_delay: float = 1.0,
 ) -> None:
-    """Continuously fetch updates from Telegram and publish them to the bus."""
+    """Continuously fetch updates from Telegram and publish them to the bus.
 
+    Args:
+        bus: Event bus used by the application.
+        api: Telegram API client to poll for updates.
+        poll_timeout: Long polling timeout in seconds.
+        idle_delay: Sleep duration between empty polling attempts.
+
+    """
     logger.info("Starting polling loop")
     offset: Optional[int] = None
     try:
@@ -273,6 +334,7 @@ class WebhookServer:
     """Minimal HTTP server to accept Telegram webhook updates."""
 
     def __init__(self, host: str, port: int, secret: str, bus: EventBus) -> None:
+        """Store webhook configuration and prepare server state."""
         self.host = host
         self.port = port
         self.secret = secret
@@ -280,6 +342,7 @@ class WebhookServer:
         self._server: asyncio.base_events.Server | None = None
 
     async def start(self) -> None:
+        """Start listening for incoming webhook requests."""
         self._server = await asyncio.start_server(
             self._handle_client, self.host, self.port
         )
@@ -291,6 +354,7 @@ class WebhookServer:
     async def _handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
+        """Read an HTTP request and dispatch it to :meth:`process_request`."""
         try:
             request = await self._read_request(reader)
         except Exception:  # pragma: no cover - defensive logging
@@ -313,6 +377,7 @@ class WebhookServer:
     async def _read_request(
         self, reader: asyncio.StreamReader
     ) -> tuple[str, Dict[str, str], bytes] | None:
+        """Read a minimal HTTP request from the stream."""
         data = b""
         while b"\r\n\r\n" not in data:
             chunk = await reader.read(1024)
@@ -344,6 +409,7 @@ class WebhookServer:
     async def process_request(
         self, method: str, headers: Mapping[str, str], body: bytes
     ) -> tuple[int, bytes]:
+        """Validate incoming webhook requests and publish events."""
         if method != "POST":
             return 405, b""
         token = headers.get("x-telegram-bot-api-secret-token")
@@ -361,12 +427,14 @@ class WebhookServer:
         return 200, b"{}"
 
     async def stop(self) -> None:
+        """Stop the HTTP server if it is running."""
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
 
     async def serve_forever(self) -> None:
+        """Block until the server is cancelled."""
         if self._server is None:
             raise RuntimeError("Server is not started")
         async with self._server:
@@ -374,6 +442,7 @@ class WebhookServer:
 
     @staticmethod
     def _format_response(status: int, body: bytes) -> bytes:
+        """Construct a raw HTTP response body."""
         reason = {
             200: "OK",
             400: "Bad Request",
@@ -401,8 +470,15 @@ async def run_webhook(
     *,
     secret: str,
 ) -> None:
-    """Run webhook HTTP server until cancelled."""
+    """Run webhook HTTP server until cancelled.
 
+    Args:
+        host: Interface the server should bind to.
+        port: TCP port for incoming connections.
+        bus: Event bus to publish updates to.
+        secret: Shared secret used to validate requests.
+
+    """
     server = WebhookServer(host, port, secret, bus)
     await server.start()
     try:

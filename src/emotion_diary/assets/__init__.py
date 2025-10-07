@@ -26,7 +26,6 @@ def ensure_builtin_assets(target_dir: Path | str | None = None) -> dict[str, Pat
     requested directory, returning a mapping between sprite file names and the
     resulting paths.
     """
-
     if target_dir is None:
         target_dir = Path(__file__).resolve().parent
     else:

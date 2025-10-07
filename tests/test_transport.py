@@ -1,3 +1,5 @@
+"""Integration-style tests for the Telegram transport components."""
+
 from __future__ import annotations
 
 import asyncio
@@ -15,27 +17,34 @@ from emotion_diary.storage import SQLiteAdapter, Storage
 
 
 class FakeTelegramAPI:
+    """In-memory stand-in for the Telegram API used during tests."""
+
     def __init__(self, updates: list[dict]):
+        """Store prepared updates and initialise tracking attributes."""
         self._updates = list(updates)
         self.sent: list[tuple[str, dict]] = []
         self.offsets: list[int | None] = []
         self.sent_event = asyncio.Event()
 
-    async def get_updates(self, *, offset=None, timeout=None, allowed_updates=None):  # noqa: D401
+    async def get_updates(self, *, offset=None, timeout=None, allowed_updates=None):
+        """Return queued updates while recording offsets."""
         self.offsets.append(offset)
         result = list(self._updates)
         self._updates.clear()
         return result
 
     async def send_message(self, chat_id, text, **extra):
+        """Record outgoing ``sendMessage`` requests."""
         self.sent.append(("sendMessage", {"chat_id": chat_id, "text": text, **extra}))
         self.sent_event.set()
 
     async def send_photo(self, chat_id, photo, **extra):
+        """Record outgoing ``sendPhoto`` requests."""
         self.sent.append(("sendPhoto", {"chat_id": chat_id, "photo": photo, **extra}))
         self.sent_event.set()
 
     async def call_method(self, method, params=None, *, files=None):
+        """Record generic API calls, including uploaded files."""
         payload = {"params": dict(params or {})}
         if files is not None:
             payload["files"] = files
@@ -44,9 +53,11 @@ class FakeTelegramAPI:
 
 
 def test_polling_transport_integration(tmp_path):
+    """Verify that polling transport orchestrates agents and responders."""
     import pytest
 
     async def _run():
+        """Run the polling workflow end-to-end using in-memory dependencies."""
         bus = EventBus()
         storage = Storage(SQLiteAdapter(":memory:"))
         Dedup(bus)
@@ -117,7 +128,10 @@ def test_polling_transport_integration(tmp_path):
 
 
 def test_telegram_responder_sends_photo():
+    """Ensure TelegramResponder issues photo requests when sprites are provided."""
+
     async def _run():
+        """Publish a ``tg.response`` event and assert a photo send call."""
         bus = EventBus()
         api = FakeTelegramAPI([])
         TelegramResponder(bus, api)
@@ -142,7 +156,10 @@ def test_telegram_responder_sends_photo():
 
 
 def test_telegram_responder_uploads_document(tmp_path):
+    """Ensure TelegramResponder uploads local files for document responses."""
+
     async def _run():
+        """Publish a ``sendDocument`` response and assert file upload behaviour."""
         bus = EventBus()
         api = FakeTelegramAPI([])
         TelegramResponder(bus, api)
@@ -179,11 +196,15 @@ def test_telegram_responder_uploads_document(tmp_path):
 
 
 def test_webhook_server_validates_secret_and_publishes():
+    """Ensure webhook requests are validated and routed to the event bus."""
+
     async def _run():
+        """Run webhook request handling against the in-memory bus."""
         bus = EventBus()
         received: list[Event] = []
 
         async def capture(event: Event) -> None:
+            """Collect published events for assertions."""
             received.append(event)
 
         bus.subscribe("tg.update", capture)

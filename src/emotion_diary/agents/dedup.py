@@ -22,7 +22,6 @@ class Dedup:
 
     def __post_init__(self) -> None:
         """Subscribe to raw Telegram updates for deduplication."""
-
         self.bus.subscribe("tg.update", self.handle_update)
 
     def _prune(self, now: datetime) -> None:
@@ -30,8 +29,8 @@ class Dedup:
 
         Args:
             now: Reference timestamp used to evaluate staleness.
-        """
 
+        """
         while self._order and now - self._order[0][1] > self.window:
             update_id, _ = self._order.popleft()
             self._seen.pop(update_id, None)
@@ -41,8 +40,8 @@ class Dedup:
 
         Args:
             event: Telegram update event subject to deduplication.
-        """
 
+        """
         if event.metadata.get("dedup_passed"):
             return
         update_id = event.payload.get("update_id")
@@ -70,7 +69,6 @@ class Dedup:
 
     async def flush(self) -> None:
         """Clear cached update IDs for shutdowns or tests."""
-
         await asyncio.sleep(0)
         self._seen.clear()
         self._order.clear()

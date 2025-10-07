@@ -25,7 +25,6 @@ class Export:
 
     def __post_init__(self) -> None:
         """Prepare filesystem storage and subscribe to export requests."""
-
         self.export_dir.mkdir(parents=True, exist_ok=True)
         self.bus.subscribe("export.request", self.handle)
 
@@ -34,8 +33,8 @@ class Export:
 
         Args:
             event: Event with identifiers describing the export context.
-        """
 
+        """
         payload = event.payload
         pid = payload.get("pid")
         chat_id = payload.get("chat_id")
@@ -66,8 +65,8 @@ class Export:
 
         Returns:
             The list of entries sorted by timestamp for the export file.
-        """
 
+        """
         try:
             return list(self.storage.list_entries(pid))
         except Exception as exc:  # pragma: no cover - defensive fallback
@@ -105,8 +104,8 @@ class Export:
 
         Returns:
             Absolute path to the generated CSV file.
-        """
 
+        """
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         file_path = self.export_dir / f"{pid}-{timestamp}.csv"
         with file_path.open("w", newline="", encoding="utf-8") as csvfile:

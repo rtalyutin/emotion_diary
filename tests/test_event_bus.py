@@ -1,3 +1,5 @@
+"""Tests for the in-process event bus implementation."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,11 +8,15 @@ from emotion_diary.event_bus import EventBus
 
 
 def test_event_bus_publish_subscribe():
+    """Ensure that events published on the bus reach subscribed handlers."""
+
     async def _run():
+        """Run the async test scenario for the event bus."""
         bus = EventBus()
         received = []
 
         async def handler(event):
+            """Capture published events for later assertions."""
             received.append(event.payload["value"])
 
         bus.subscribe("test.event", handler)

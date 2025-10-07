@@ -20,7 +20,6 @@ class Delete:
 
     def __post_init__(self) -> None:
         """Subscribe to delete requests on the event bus."""
-
         self.bus.subscribe("delete.request", self.handle)
 
     async def handle(self, event: Event) -> None:
@@ -28,8 +27,8 @@ class Delete:
 
         Args:
             event: Event describing which user initiated the deletion.
-        """
 
+        """
         payload = event.payload
         pid = payload.get("pid")
         chat_id = payload.get("chat_id")

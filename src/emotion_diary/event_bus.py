@@ -22,6 +22,7 @@ class Event:
 
     def copy(self, *, name: Optional[str] = None, payload: Optional[MutableMapping[str, Any]] = None,
              metadata: Optional[MutableMapping[str, Any]] = None) -> "Event":
+        """Create a shallow copy optionally overriding event attributes."""
         return Event(
             name=name or self.name,
             payload=dict(self.payload if payload is None else payload),
@@ -36,12 +37,12 @@ class EventBus:
     """Simple pub/sub event bus with asyncio support."""
 
     def __init__(self) -> None:
+        """Initialise subscriber storage and concurrency primitives."""
         self._subscribers: Dict[str, List[EventHandler]] = defaultdict(list)
         self._lock = asyncio.Lock()
 
     def subscribe(self, event_name: str | Iterable[str], handler: EventHandler) -> None:
         """Register ``handler`` for the given ``event_name`` or list of names."""
-
         if isinstance(event_name, str):
             event_names = [event_name]
         else:
@@ -57,7 +58,6 @@ class EventBus:
         metadata: Optional[MutableMapping[str, Any]] = None,
     ) -> None:
         """Publish an event to all registered subscribers."""
-
         event = Event(name=event_name, payload=dict(payload or {}), metadata=dict(metadata or {}))
         async with self._lock:
             subscribers = list(self._subscribers.get(event_name, ())) + list(self._subscribers.get("*", ()))
@@ -79,5 +79,4 @@ class EventBus:
 
     def clear(self) -> None:
         """Remove all subscribers (useful for tests)."""
-
         self._subscribers.clear()

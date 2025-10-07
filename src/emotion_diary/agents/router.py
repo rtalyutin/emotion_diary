@@ -22,7 +22,6 @@ class Router:
 
     def __post_init__(self) -> None:
         """Subscribe to incoming Telegram updates on the event bus."""
-
         self.bus.subscribe("tg.update", self.handle_update)
 
     async def handle_update(self, event: Event) -> None:
@@ -30,8 +29,8 @@ class Router:
 
         Args:
             event: Telegram update wrapped in an event bus envelope.
-        """
 
+        """
         if not event.metadata.get("dedup_passed"):
             return
         payload = event.payload
@@ -83,8 +82,8 @@ class Router:
 
         Returns:
             The resolved command name or ``None`` if nothing matches.
-        """
 
+        """
         data = payload.get("callback_data") or payload.get("text") or ""
         data = data.strip().lower()
         if data.startswith("/export"):
@@ -109,8 +108,8 @@ class Router:
 
         Returns:
             Mood value in the ``{-1, 0, 1}`` range or ``None`` if missing.
-        """
 
+        """
         callback_data = payload.get("callback_data")
         if isinstance(callback_data, str):
             callback_data = callback_data.strip()
