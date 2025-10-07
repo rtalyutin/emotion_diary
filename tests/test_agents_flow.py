@@ -7,8 +7,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from emotion_diary.agents import (
     CheckinWriter,
     Dedup,
@@ -135,13 +133,16 @@ async def verify_delete(
     assert any("данные удалены" in resp["text"].lower() for resp in responses)
 
 
-@pytest.mark.asyncio
-async def test_checkin_export_delete_flow(tmp_path: Path) -> None:
-    """Ensure the check-in, export, and delete flow works end-to-end."""
-
-    bus, storage, export_dir, responses = create_agent_environment(tmp_path)
-    now = datetime.now(UTC)
-    chat_id = 1001
+async def exercise_checkin_export_delete_flow(
+    bus: EventBus,
+    storage: Storage,
+    responses: Responses,
+    export_dir: Path,
+    *,
+    chat_id: int,
+    now: datetime,
+) -> None:
+    """Drive the check-in, export, and delete path end-to-end."""
 
     pid = await perform_checkin(
         bus,
@@ -166,6 +167,25 @@ async def test_checkin_export_delete_flow(tmp_path: Path) -> None:
         responses,
         pid=pid,
         chat_id=chat_id,
+    )
+
+
+def test_checkin_export_delete_flow(tmp_path: Path) -> None:
+    """Ensure the check-in, export, and delete flow works end-to-end."""
+
+    bus, storage, export_dir, responses = create_agent_environment(tmp_path)
+    now = datetime.now(UTC)
+    chat_id = 1001
+
+    asyncio.run(
+        exercise_checkin_export_delete_flow(
+            bus,
+            storage,
+            responses,
+            export_dir,
+            chat_id=chat_id,
+            now=now,
+        )
     )
 
 
