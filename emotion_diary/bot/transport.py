@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional
 from urllib import request as urlrequest
 
-from emotion_diary.event_bus import EventBus
+from emotion_diary.event_bus import Event, EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,9 @@ class TelegramAPIError(RuntimeError):
 class TelegramAPI:
     """Minimal asynchronous Telegram Bot API client."""
 
-    def __init__(self, token: str, *, base_url: str | None = None, timeout: float = 10.0) -> None:
+    def __init__(
+        self, token: str, *, base_url: str | None = None, timeout: float = 10.0
+    ) -> None:
         if not token:
             raise ValueError("Telegram bot token must be provided")
         self.token = token
@@ -141,7 +143,10 @@ def _encode_multipart_formdata(
 def normalize_update(update: Mapping[str, Any]) -> Dict[str, Any]:
     """Convert Telegram update payload to internal ``tg.update`` structure."""
 
-    payload: Dict[str, Any] = {"update_id": update.get("update_id"), "raw": dict(update)}
+    payload: Dict[str, Any] = {
+        "update_id": update.get("update_id"),
+        "raw": dict(update),
+    }
 
     def _extract_message(message: Mapping[str, Any]) -> None:
         chat = message.get("chat") or {}
@@ -191,7 +196,8 @@ class TelegramResponder:
     def __post_init__(self) -> None:
         self.bus.subscribe("tg.response", self.handle)
 
-    async def handle(self, event) -> None:
+    async def handle(self, event: Event) -> None:
+        """Send ``tg.response`` payloads to Telegram."""
         payload = dict(event.payload)
         payload.pop("created_at", None)
         method = payload.pop("method", None)
@@ -221,7 +227,9 @@ class TelegramResponder:
         elif text:
             await self.api.send_message(chat_id, text, **payload)
         else:
-            logger.debug("TelegramResponder payload has neither text nor sprite: %s", payload)
+            logger.debug(
+                "TelegramResponder payload has neither text nor sprite: %s", payload
+            )
 
 
 async def run_polling(
@@ -272,7 +280,9 @@ class WebhookServer:
         self._server: asyncio.base_events.Server | None = None
 
     async def start(self) -> None:
-        self._server = await asyncio.start_server(self._handle_client, self.host, self.port)
+        self._server = await asyncio.start_server(
+            self._handle_client, self.host, self.port
+        )
         sockets = getattr(self._server, "sockets", None)
         if sockets:
             sock = sockets[0].getsockname()
