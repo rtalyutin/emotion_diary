@@ -5,13 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from emotion_diary.event_bus import EventBus
+from emotion_diary.event_bus import EventBus, EventHandler
 
 
 class SupportsSubscribe(Protocol):
     """Protocol describing the minimal event bus subscription interface."""
 
-    def subscribe(self, event_name: str | tuple[str, ...], handler):
+    def subscribe(
+        self, event_name: str | tuple[str, ...], handler: EventHandler
+    ) -> None:
         """Register a handler for the given event name or tuple of names."""
 
 

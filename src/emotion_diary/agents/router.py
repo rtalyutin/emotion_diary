@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from emotion_diary.event_bus import Event, EventBus
 from emotion_diary.storage import Storage
@@ -73,7 +75,7 @@ class Router:
         else:
             logger.debug("Unhandled command %s", command)
 
-    def _resolve_command(self, payload: dict) -> str | None:
+    def _resolve_command(self, payload: Mapping[str, Any]) -> str | None:
         """Derive the high-level command encoded in the payload.
 
         Args:
@@ -83,8 +85,14 @@ class Router:
             The resolved command name or ``None`` if nothing matches.
 
         """
-        data = payload.get("callback_data") or payload.get("text") or ""
-        data = data.strip().lower()
+        data_candidate = payload.get("callback_data")
+        if not isinstance(data_candidate, str):
+            text_candidate = payload.get("text")
+            if isinstance(text_candidate, str):
+                data_candidate = text_candidate
+            else:
+                data_candidate = ""
+        data = data_candidate.strip().lower()
         if data.startswith("/export"):
             return "export"
         if data.startswith("/delete"):
@@ -99,7 +107,7 @@ class Router:
             return "checkin"
         return None
 
-    def _resolve_mood(self, payload: dict) -> int | None:
+    def _resolve_mood(self, payload: Mapping[str, Any]) -> int | None:
         """Extract the mood value from the payload.
 
         Args:
@@ -121,13 +129,15 @@ class Router:
                     mood = None
                 else:
                     return mood if mood in {-1, 0, 1} else None
-        if payload.get("mood") is not None:
+        mood_value = payload.get("mood")
+        if mood_value is not None:
             try:
-                mood = int(payload["mood"])
+                mood = int(mood_value)
             except (TypeError, ValueError):
                 mood = None
         else:
-            text = (payload.get("text") or "").lower()
+            text_candidate = payload.get("text")
+            text = text_candidate.lower() if isinstance(text_candidate, str) else ""
             mapping = {
                 "bad": -1,
                 "meh": 0,
