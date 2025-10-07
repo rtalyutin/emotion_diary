@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -61,7 +62,7 @@ class Notifier:
         await self.bus.publish("tg.response", response)
 
     def _build_message(
-        self, event_name: str, payload: dict
+        self, event_name: str, payload: Mapping[str, Any]
     ) -> tuple[str | None, dict[str, Any]]:
         """Derive message text and extras for a Telegram response.
 
