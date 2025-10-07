@@ -15,13 +15,23 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class Router:
+    """Routes Telegram updates into domain-specific commands and events."""
+
     bus: EventBus
     storage: Storage
 
     def __post_init__(self) -> None:
+        """Subscribe to incoming Telegram updates on the event bus."""
+
         self.bus.subscribe("tg.update", self.handle_update)
 
     async def handle_update(self, event: Event) -> None:
+        """Transform Telegram updates into domain events.
+
+        Args:
+            event: Telegram update wrapped in an event bus envelope.
+        """
+
         if not event.metadata.get("dedup_passed"):
             return
         payload = event.payload
@@ -66,6 +76,15 @@ class Router:
             logger.debug("Unhandled command %s", command)
 
     def _resolve_command(self, payload: dict) -> str | None:
+        """Derive the high-level command encoded in the payload.
+
+        Args:
+            payload: Incoming Telegram payload with text or callback data.
+
+        Returns:
+            The resolved command name or ``None`` if nothing matches.
+        """
+
         data = payload.get("callback_data") or payload.get("text") or ""
         data = data.strip().lower()
         if data.startswith("/export"):
@@ -83,6 +102,15 @@ class Router:
         return None
 
     def _resolve_mood(self, payload: dict) -> Optional[int]:
+        """Extract the mood value from the payload.
+
+        Args:
+            payload: Telegram payload containing mood hints.
+
+        Returns:
+            Mood value in the ``{-1, 0, 1}`` range or ``None`` if missing.
+        """
+
         callback_data = payload.get("callback_data")
         if isinstance(callback_data, str):
             callback_data = callback_data.strip()
