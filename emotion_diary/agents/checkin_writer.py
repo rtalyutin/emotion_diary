@@ -14,13 +14,23 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class CheckinWriter:
+    """Persists mood entries and notifies downstream consumers."""
+
     bus: EventBus
     storage: Storage
 
     def __post_init__(self) -> None:
+        """Subscribe to check-in save events."""
+
         self.bus.subscribe("checkin.save", self.handle)
 
     async def handle(self, event: Event) -> None:
+        """Validate incoming payload and persist the mood entry.
+
+        Args:
+            event: Event carrying the check-in payload from the router.
+        """
+
         payload = event.payload
         pid = payload.get("pid")
         chat_id = payload.get("chat_id")

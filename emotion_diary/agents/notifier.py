@@ -15,15 +15,31 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class Notifier:
+    """Builds Telegram responses from domain events."""
+
     bus: EventBus
 
     def __post_init__(self) -> None:
+        """Subscribe to events that require user-facing notifications."""
+
         self.bus.subscribe(
-            ("checkin.saved", "pet.rendered", "ping.request", "export.ready", "delete.done"),
+            (
+                "checkin.saved",
+                "pet.rendered",
+                "ping.request",
+                "export.ready",
+                "delete.done",
+            ),
             self.handle,
         )
 
     async def handle(self, event: Event) -> None:
+        """Compose Telegram responses and emit them to the bus.
+
+        Args:
+            event: Event containing data to be delivered to a Telegram chat.
+        """
+
         payload = event.payload
         chat_id = payload.get("chat_id")
         if chat_id is None:
@@ -45,7 +61,19 @@ class Notifier:
             response["sprite"] = payload.get("sprite")
         await self.bus.publish("tg.response", response)
 
-    def _build_message(self, event_name: str, payload: dict) -> tuple[str | None, dict[str, Any]]:
+    def _build_message(
+        self, event_name: str, payload: dict
+    ) -> tuple[str | None, dict[str, Any]]:
+        """Derive message text and extras for a Telegram response.
+
+        Args:
+            event_name: Name of the domain event being processed.
+            payload: Event payload with contextual data.
+
+        Returns:
+            A tuple of optional text and additional Telegram API parameters.
+        """
+
         extras: dict[str, Any] = {}
         if event_name == "checkin.saved":
             mood = payload.get("entry", {}).get("mood")

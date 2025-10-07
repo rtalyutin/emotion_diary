@@ -13,20 +13,36 @@ from emotion_diary.event_bus import Event, EventBus
 
 @dataclass(slots=True)
 class Dedup:
+    """Filters out repeated Telegram updates within a time window."""
+
     bus: EventBus
     window: timedelta = timedelta(minutes=10)
     _seen: Dict[int, datetime] = field(init=False, default_factory=dict)
     _order: Deque[Tuple[int, datetime]] = field(init=False, default_factory=deque)
 
     def __post_init__(self) -> None:
+        """Subscribe to raw Telegram updates for deduplication."""
+
         self.bus.subscribe("tg.update", self.handle_update)
 
     def _prune(self, now: datetime) -> None:
+        """Drop cached updates that fall outside the deduplication window.
+
+        Args:
+            now: Reference timestamp used to evaluate staleness.
+        """
+
         while self._order and now - self._order[0][1] > self.window:
             update_id, _ = self._order.popleft()
             self._seen.pop(update_id, None)
 
     async def handle_update(self, event: Event) -> None:
+        """Relay unique updates and suppress duplicates.
+
+        Args:
+            event: Telegram update event subject to deduplication.
+        """
+
         if event.metadata.get("dedup_passed"):
             return
         update_id = event.payload.get("update_id")
@@ -53,7 +69,7 @@ class Dedup:
         )
 
     async def flush(self) -> None:
-        """Flush the cache, useful for graceful shutdowns/tests."""
+        """Clear cached update IDs for shutdowns or tests."""
 
         await asyncio.sleep(0)
         self._seen.clear()
