@@ -23,7 +23,14 @@ from emotion_diary.storage import SQLiteAdapter, Storage
 Responses = list[dict[str, Any]]
 
 
-def create_agent_environment(tmp_path: Path) -> tuple[EventBus, Storage, Path, Responses]:
+def create_agent_environment(
+    tmp_path: Path,
+) -> tuple[
+    EventBus,
+    Storage,
+    Path,
+    Responses,
+]:
     """Instantiate agents and capture outgoing responses for assertions."""
 
     bus = EventBus()
