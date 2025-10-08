@@ -8,9 +8,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterable, MutableMapping
 from dataclasses import dataclass, field
-from typing import (
-    Any,
-)
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
