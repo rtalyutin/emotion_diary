@@ -99,6 +99,7 @@ async def setup_polling_environment(tmp_path: Path) -> PollingEnvironment:
     captured_updates: list[dict[str, Any]] = []
 
     def capture_update(event: Event) -> None:
+        """Record normalised update payloads during the polling setup."""
         captured_updates.append(dict(event.payload))
 
     bus.subscribe("tg.update", capture_update)
