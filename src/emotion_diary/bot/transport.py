@@ -163,7 +163,9 @@ def _encode_multipart_formdata(
     body = bytearray()
     for name, value in fields.items():
         body.extend(f"--{boundary}\r\n".encode())
-        body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
+        body.extend(
+            f"""Content-Disposition: form-data; name="{name}"\r\n\r\n""".encode()
+        )
         if isinstance(value, bytes):
             body.extend(value)
         else:
@@ -172,7 +174,7 @@ def _encode_multipart_formdata(
     for name, (filename, content, content_type) in files.items():
         body.extend(f"--{boundary}\r\n".encode())
         body.extend(
-            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'.encode()
+            f"""Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n""".encode()
         )
         body.extend(f"Content-Type: {content_type}\r\n\r\n".encode())
         body.extend(content)
