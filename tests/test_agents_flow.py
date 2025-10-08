@@ -48,6 +48,7 @@ def create_agent_environment(
     responses: Responses = []
 
     def capture_response(event: Event) -> None:
+        """Append emitted tg.response payloads for later assertions."""
         responses.append(event.payload)
 
     bus.subscribe("tg.response", capture_response)
